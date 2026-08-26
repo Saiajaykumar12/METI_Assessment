@@ -13,6 +13,14 @@ export default function Assessment({
   assessment,
   onComplete,
 }) {
+    if (!candidate || !assessment) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p>Preparing assessment...</p>
+      </div>
+    );
+  }
+  
   const [questions, setQuestions] = useState([]);
   const [attempt, setAttempt] = useState(null);
   const [current, setCurrent] = useState(0);
@@ -20,6 +28,7 @@ export default function Assessment({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  
 
   useEffect(() => {
     async function start() {
@@ -27,7 +36,7 @@ export default function Assessment({
         const [questionData, attemptData] =
           await Promise.all([
             getQuestions(assessment.id),
-            createAttempt(assessment.id, candidate.id),
+            createAttempt(assessment.id, candidate?.id),
           ]);
 
         setQuestions(questionData);

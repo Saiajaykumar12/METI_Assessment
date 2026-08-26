@@ -12,7 +12,6 @@ router = APIRouter(
 @router.post("")
 def create_candidate(request: CandidateCreate):
     candidate_data = {
-        "user_id": "00000000-0000-0000-0000-000000000001",
         "full_name": request.full_name,
         "country": request.country,
         "city": request.city,

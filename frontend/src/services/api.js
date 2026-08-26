@@ -38,7 +38,10 @@ export async function getQuestions(assessmentId) {
   return response.json();
 }
 
-export async function createAttempt(assessmentId, candidateId) {
+export async function createAttempt(
+  assessmentId,
+  candidateId
+) {
   const response = await fetch(
     `${API_URL}/attempts?assessment_id=${assessmentId}`,
     {
@@ -72,7 +75,7 @@ export async function saveResponse(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        answer,
+        answer: answer,
       }),
     }
   );

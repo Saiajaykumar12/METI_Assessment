@@ -38,8 +38,7 @@ def calculate_score(attempt_id: str):
         supabase
         .table("questions")
         .select(
-            "id, question_code, question_type, "
-            "scoring_config"
+            "id, question_code, question_type, scoring_config"
         )
         .in_("id", question_ids)
         .execute()
@@ -62,6 +61,7 @@ def calculate_score(attempt_id: str):
             continue
 
         config = question.get("scoring_config") or {}
+
         competency = config.get(
             "competency",
             "general"
@@ -114,8 +114,10 @@ def calculate_score(attempt_id: str):
     for competency, scores in competency_scores.items():
         average = sum(scores) / len(scores)
 
+        max_competency_score = 4
+
         competency_result[competency] = round(
-            average,
+            (average / max_competency_score) * 100,
             2
         )
 
@@ -123,13 +125,13 @@ def calculate_score(attempt_id: str):
     strengths = [
         competency
         for competency, score in competency_result.items()
-        if score >= 4
+        if score >= 70
     ]
 
     development_gaps = [
         competency
         for competency, score in competency_result.items()
-        if score < 3
+        if score < 50
     ]
 
     return {

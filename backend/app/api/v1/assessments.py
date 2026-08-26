@@ -1,38 +1,50 @@
 from fastapi import APIRouter, HTTPException
 
 from app.db.database import supabase
-from app.schemas.candidate import CandidateCreate
 
 router = APIRouter(
-    prefix="/candidates",
-    tags=["Candidates"],
+    prefix="/assessments",
+    tags=["Assessments"],
 )
 
 
-@router.post("")
-def create_candidate(request: CandidateCreate):
-
-    candidate_data = {
-        "full_name": request.full_name,
-        "country": request.country,
-        "city": request.city,
-        "education": request.education,
-        "experience_years": request.experience_years,
-        "job_title": request.job_title,
-        "career_goal": request.career_goal,
-    }
-
+@router.get("")
+def get_assessments():
     result = (
         supabase
-        .table("candidates")
-        .insert(candidate_data)
+        .table("assessments")
+        .select("*")
+        .eq("status", "published")
         .execute()
     )
 
-    if not result.data:
+    return result.data
+
+
+@router.get("/{assessment_id}/questions")
+def get_questions(assessment_id: str):
+    assessment = (
+        supabase
+        .table("assessments")
+        .select("id")
+        .eq("id", assessment_id)
+        .single()
+        .execute()
+    )
+
+    if not assessment.data:
         raise HTTPException(
-            status_code=400,
-            detail="Could not create candidate",
+            status_code=404,
+            detail="Assessment not found",
         )
 
-    return result.data[0]
+    result = (
+        supabase
+        .table("questions")
+        .select("*")
+        .eq("assessment_id", assessment_id)
+        .order("order_index")
+        .execute()
+    )
+
+    return result.data

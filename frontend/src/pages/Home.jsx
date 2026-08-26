@@ -1,73 +1,152 @@
-import { useEffect, useState } from "react";
-import CandidateForm from "../components/CandidateForm";
-import { getAssessments } from "../services/api";
+import { useState } from "react";
+import { createCandidate } from "../services/api";
 
-export default function Home({ onStart }) {
-  const [assessments, setAssessments] = useState([]);
-  const [selected, setSelected] = useState(null);
+export default function Home({ onCandidateCreated }) {
+  const [form, setForm] = useState({
+    full_name: "",
+    country: "",
+    city: "",
+    education: "",
+    experience_years: 0,
+    job_title: "",
+    career_goal: "",
+  });
+
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    getAssessments()
-      .then(setAssessments)
-      .catch((err) => setError(err.message));
-  }, []);
+  function handleChange(e) {
+    const { name, value } = e.target;
 
-  function handleCandidate(candidate) {
-    if (!selected) {
-      setError("Please select an assessment.");
-      return;
+    setForm((prev) => ({
+      ...prev,
+      [name]:
+        name === "experience_years"
+          ? Number(value)
+          : value,
+    }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const candidate = await createCandidate(form);
+
+      onCandidateCreated(candidate);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
-
-    onStart(candidate, selected);
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-10">
-      <div className="mx-auto max-w-4xl">
+    <main className="min-h-screen bg-slate-50 px-6 py-12">
+      <div className="mx-auto max-w-2xl">
+
         <div className="mb-8 text-center">
-          <h2 className="text-4xl font-bold text-slate-900">
-            Assessment Platform
-          </h2>
+          <h1 className="text-4xl font-bold text-slate-900">
+            METI Assessment
+          </h1>
 
           <p className="mt-3 text-slate-500">
-            Complete your assessment and discover your strengths.
+            Complete your candidate information to begin.
           </p>
         </div>
 
-        <div className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
-          <h3 className="mb-4 text-lg font-semibold">
-            Select Assessment
-          </h3>
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-2xl bg-white p-8 shadow-sm"
+        >
 
-          {error && (
-            <p className="mb-4 text-sm text-red-600">{error}</p>
-          )}
+          <div className="grid gap-5">
 
-          <div className="grid gap-4 md:grid-cols-2">
-            {assessments.map((assessment) => (
-              <button
-                key={assessment.id}
-                onClick={() => setSelected(assessment)}
-                className={`rounded-xl border p-5 text-left transition ${
-                  selected?.id === assessment.id
-                    ? "border-slate-900 bg-slate-100"
-                    : "border-slate-200 hover:border-slate-400"
-                }`}
-              >
-                <h4 className="font-semibold text-slate-900">
-                  {assessment.name}
-                </h4>
+            <input
+              name="full_name"
+              placeholder="Full Name"
+              value={form.full_name}
+              onChange={handleChange}
+              required
+              className="rounded-lg border p-3"
+            />
 
-                <p className="mt-2 text-sm text-slate-500">
-                  {assessment.description}
-                </p>
-              </button>
-            ))}
+            <input
+              name="country"
+              placeholder="Country"
+              value={form.country}
+              onChange={handleChange}
+              required
+              className="rounded-lg border p-3"
+            />
+
+            <input
+              name="city"
+              placeholder="City"
+              value={form.city}
+              onChange={handleChange}
+              required
+              className="rounded-lg border p-3"
+            />
+
+            <input
+              name="education"
+              placeholder="Education"
+              value={form.education}
+              onChange={handleChange}
+              required
+              className="rounded-lg border p-3"
+            />
+
+            <input
+              type="number"
+              name="experience_years"
+              placeholder="Experience (years)"
+              min="0"
+              value={form.experience_years}
+              onChange={handleChange}
+              required
+              className="rounded-lg border p-3"
+            />
+
+            <input
+              name="job_title"
+              placeholder="Current Job Title"
+              value={form.job_title}
+              onChange={handleChange}
+              required
+              className="rounded-lg border p-3"
+            />
+
+            <textarea
+              name="career_goal"
+              placeholder="Career Goal"
+              value={form.career_goal}
+              onChange={handleChange}
+              required
+              rows="4"
+              className="rounded-lg border p-3"
+            />
+
+            {error && (
+              <p className="rounded-lg bg-red-50 p-3 text-red-600">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="rounded-lg bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+            >
+              {loading ? "Creating..." : "Continue"}
+            </button>
+
           </div>
-        </div>
-
-        <CandidateForm onCreated={handleCandidate} />
+        </form>
       </div>
     </main>
   );

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from app.services.scoring import calculate_score
+from datetime import datetime, timezone
 
 from app.db.database import supabase
 from app.schemas.attempts import (
@@ -177,7 +178,7 @@ def submit_attempt(attempt_id: str):
         .table("assessment_attempts")
         .update({
             "status": "completed",
-            "completed_at": "now()",
+            "completed_at": datetime.now(timezone.utc).isoformat()
         })
         .eq("id", attempt_id)
         .execute()
