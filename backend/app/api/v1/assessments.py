@@ -10,11 +10,11 @@ router = APIRouter(
 
 @router.get("")
 def get_assessments():
+
     result = (
         supabase
         .table("assessments")
         .select("*")
-        .eq("status", "published")
         .execute()
     )
 
@@ -23,27 +23,12 @@ def get_assessments():
 
 @router.get("/{assessment_id}/questions")
 def get_questions(assessment_id: str):
-    assessment = (
-        supabase
-        .table("assessments")
-        .select("id")
-        .eq("id", assessment_id)
-        .single()
-        .execute()
-    )
-
-    if not assessment.data:
-        raise HTTPException(
-            status_code=404,
-            detail="Assessment not found",
-        )
 
     result = (
         supabase
         .table("questions")
         .select("*")
         .eq("assessment_id", assessment_id)
-        .order("order_index")
         .execute()
     )
 

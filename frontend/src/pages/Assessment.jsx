@@ -28,6 +28,7 @@ export default function Assessment({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [timeLeft, setTimeLeft] = useState(30 * 60);
   
 
   useEffect(() => {
@@ -36,7 +37,7 @@ export default function Assessment({
         const [questionData, attemptData] =
           await Promise.all([
             getQuestions(assessment.id),
-            createAttempt(assessment.id, candidate?.id),
+            createAttempt(assessment?.id, candidate?.id),
           ]);
 
         setQuestions(questionData);
@@ -112,6 +113,16 @@ export default function Assessment({
   }
 
   const question = questions[current];
+
+  if (!question) {
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <p className="text-red-600">
+        No questions available for this assessment.
+      </p>
+    </div>
+  );
+}
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10">
