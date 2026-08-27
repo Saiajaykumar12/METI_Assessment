@@ -1,179 +1,207 @@
 import { useEffect, useState } from "react";
 
 import Header from "./components/Header";
-import Home from "./pages/Home";
 import Login from "./pages/Login";
+import Home from "./pages/Home";
 import Assessment from "./pages/Assessment";
 import Result from "./pages/Result";
 
 import { supabase } from "./services/supabase";
 
+const STORAGE_KEY = "meti_assessment_state";
 
 function App() {
   const [session, setSession] = useState(null);
-  const [page, setPage] = useState("loading");
+  const [loading, setLoading] = useState(true);
 
+  const [screen, setScreen] = useState("home");
   const [candidate, setCandidate] = useState(null);
   const [assessment, setAssessment] = useState(null);
+  const [attemptId, setAttemptId] = useState(null);
   const [result, setResult] = useState(null);
 
-  const [error, setError] = useState("");
-
-
+  /*
+   * Restore assessment state when the application loads
+   */
   useEffect(() => {
-    let mounted = true;
+    const savedState = localStorage.getItem(STORAGE_KEY);
 
-    async function loadSession() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+    if (savedState) {
+      try {
+        const parsed = JSON.parse(savedState);
 
-      if (!mounted) {
-        return;
+        setScreen(parsed.screen || "home");
+        setCandidate(parsed.candidate || null);
+        setAssessment(parsed.assessment || null);
+        setAttemptId(parsed.attemptId || null);
+        setResult(parsed.result || null);
+      } catch (error) {
+        console.error(
+          "Failed to restore assessment state:",
+          error
+        );
+
+        localStorage.removeItem(STORAGE_KEY);
       }
+    }
+  }, []);
 
-      setSession(session);
-      setPage(
-        session
-          ? "home"
-          : "login"
-      );
+  /*
+   * Save assessment state whenever it changes
+   */
+  useEffect(() => {
+    /*
+     * Don't save the default empty state
+     */
+    if (
+      screen === "home" &&
+      !candidate &&
+      !assessment &&
+      !attemptId &&
+      !result
+    ) {
+      return;
     }
 
-    loadSession();
+    const state = {
+      screen,
+      candidate,
+      assessment,
+      attemptId,
+      result,
+    };
+
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(state)
+    );
+  }, [
+    screen,
+    candidate,
+    assessment,
+    attemptId,
+    result,
+  ]);
+
+  /*
+   * Supabase authentication
+   */
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setLoading(false);
+    });
 
     const {
       data: { subscription },
-    } =
-      supabase.auth.onAuthStateChange(
-        (_event, session) => {
-          setSession(session);
-
-          if (session) {
-            setPage("home");
-          } else {
-            setPage("login");
-          }
-        }
-      );
+    } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session);
+        setLoading(false);
+      }
+    );
 
     return () => {
-      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
 
-
-  function handleStart(
-    candidateData,
-    assessmentData
-  ) {
-    setError("");
-
-    setCandidate(candidateData);
-    setAssessment(assessmentData);
-
-    localStorage.setItem(
-      "candidate_id",
-      candidateData.id
-    );
-
-    localStorage.setItem(
-      "assessment_id",
-      assessmentData.id
-    );
-
-    setPage("assessment");
-  }
-
-
-  function handleComplete(resultData) {
-    setResult(resultData);
-    setPage("result");
-  }
-
-
+  /*
+   * Logout
+   */
   async function logout() {
     await supabase.auth.signOut();
 
-    localStorage.removeItem(
-      "candidate_id"
-    );
-
-    localStorage.removeItem(
-      "assessment_id"
-    );
-
-    setSession(null);
     setCandidate(null);
     setAssessment(null);
+    setAttemptId(null);
     setResult(null);
-    setPage("login");
+    setScreen("home");
+
+    /*
+     * Clear saved assessment state
+     */
+    localStorage.removeItem(STORAGE_KEY);
   }
 
+  /*
+   * Start assessment
+   */
+  function startAssessment(
+    candidateData,
+    assessmentData
+  ) {
+    setCandidate(candidateData);
+    setAssessment(assessmentData);
+    setAttemptId(null);
+    setResult(null);
+    setScreen("assessment");
+  }
 
-  if (page === "loading") {
+  /*
+   * Assessment completed
+   */
+  function finishAssessment(resultData) {
+    setResult(resultData);
+    setScreen("result");
+  }
+
+  /*
+   * Loading
+   */
+  if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p>Loading...</p>
+        Loading...
       </div>
     );
   }
 
-
+  /*
+   * Not logged in
+   */
   if (!session) {
     return <Login />;
   }
-
 
   return (
     <>
       <Header />
 
       <div className="mx-auto flex max-w-7xl justify-end px-6 pt-4">
-        <button
-          onClick={logout}
-          className="rounded-lg border px-4 py-2 text-sm"
-        >
-          Sign Out
-        </button>
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-slate-500">
+            {session.user.email}
+          </span>
+
+          <button
+            onClick={logout}
+            className="rounded-lg border px-4 py-2 text-sm"
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
-
-      {error && (
-        <div className="mx-auto mt-4 max-w-2xl rounded-lg bg-red-50 p-4 text-red-600">
-          {error}
-        </div>
+      {screen === "home" && (
+        <Home onStart={startAssessment} />
       )}
 
-
-      {page === "home" && (
-        <Home
-          onStart={handleStart}
+      {screen === "assessment" && (
+        <Assessment
+          candidate={candidate}
+          assessment={assessment}
+          attemptId={attemptId}
+          setAttemptId={setAttemptId}
+          onComplete={finishAssessment}
         />
       )}
 
-
-      {page === "assessment" &&
-        candidate &&
-        assessment && (
-          <Assessment
-            candidate={candidate}
-            assessment={assessment}
-            onComplete={handleComplete}
-          />
-        )}
-
-
-      {page === "result" &&
-        result && (
-          <Result
-            result={result}
-          />
-        )}
+      {screen === "result" && (
+        <Result result={result} />
+      )}
     </>
   );
 }
-
 
 export default App;

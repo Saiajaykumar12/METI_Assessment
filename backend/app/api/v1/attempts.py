@@ -19,6 +19,10 @@ def create_attempt(
     candidate_id: str,
 ):
     try:
+        # ---------------------------------------------
+        # Check assessment
+        # ---------------------------------------------
+
         assessment = (
             supabase
             .table("assessments")
@@ -33,6 +37,10 @@ def create_attempt(
                 status_code=404,
                 detail="Assessment not found",
             )
+
+        # ---------------------------------------------
+        # Check candidate
+        # ---------------------------------------------
 
         candidate = (
             supabase
@@ -49,6 +57,10 @@ def create_attempt(
                 detail="Candidate not found",
             )
 
+        # ---------------------------------------------
+        # Reuse existing in-progress attempt
+        # ---------------------------------------------
+
         existing = (
             supabase
             .table("attempts")
@@ -62,6 +74,10 @@ def create_attempt(
 
         if existing.data:
             return existing.data[0]
+
+        # ---------------------------------------------
+        # Create new attempt
+        # ---------------------------------------------
 
         result = (
             supabase
@@ -122,13 +138,19 @@ def get_attempt(attempt_id: str):
         )
 
 
-@router.put("/{attempt_id}/responses/{question_id}")
+@router.put(
+    "/{attempt_id}/responses/{question_id}"
+)
 def save_response(
     attempt_id: str,
     question_id: str,
     request: SaveResponseRequest,
 ):
     try:
+        # ---------------------------------------------
+        # Verify attempt
+        # ---------------------------------------------
+
         attempt = (
             supabase
             .table("attempts")
@@ -144,31 +166,84 @@ def save_response(
                 detail="Attempt not found",
             )
 
-        if attempt.data[0]["status"] != "in_progress":
+        if (
+            attempt.data[0]["status"]
+            != "in_progress"
+        ):
             raise HTTPException(
                 status_code=400,
                 detail="Assessment is already submitted",
             )
 
+        # ---------------------------------------------
+        # Check whether response already exists
+        # ---------------------------------------------
+
+        existing = (
+            supabase
+            .table("responses")
+            .select("id")
+            .eq("attempt_id", attempt_id)
+            .eq("question_id", question_id)
+            .limit(1)
+            .execute()
+        )
+
+        now = datetime.now(
+            timezone.utc
+        ).isoformat()
+
+        response_data = {
+            "attempt_id": attempt_id,
+            "question_id": question_id,
+            "answer": request.answer,
+            "submitted_at": now,
+        }
+
+        # ---------------------------------------------
+        # UPDATE existing response
+        # ---------------------------------------------
+
+        if existing.data:
+            response_id = (
+                existing.data[0]["id"]
+            )
+
+            result = (
+                supabase
+                .table("responses")
+                .update({
+                    "answer": request.answer,
+                    "submitted_at": now,
+                })
+                .eq("id", response_id)
+                .execute()
+            )
+
+            return {
+                "saved": True,
+                "action": "updated",
+                "response": (
+                    result.data[0]
+                    if result.data
+                    else None
+                ),
+            }
+
+        # ---------------------------------------------
+        # INSERT new response
+        # ---------------------------------------------
+
         result = (
             supabase
             .table("responses")
-            .upsert(
-                {
-                    "attempt_id": attempt_id,
-                    "question_id": question_id,
-                    "answer": request.answer,
-                    "submitted_at": datetime.now(
-                        timezone.utc
-                    ).isoformat(),
-                },
-                on_conflict="attempt_id,question_id",
-            )
+            .insert(response_data)
             .execute()
         )
 
         return {
             "saved": True,
+            "action": "created",
             "response": (
                 result.data[0]
                 if result.data
@@ -186,9 +261,34 @@ def save_response(
         )
 
 
-@router.get("/{attempt_id}/responses")
+@router.get(
+    "/{attempt_id}/responses"
+)
 def get_responses(attempt_id: str):
     try:
+        # ---------------------------------------------
+        # Verify attempt
+        # ---------------------------------------------
+
+        attempt = (
+            supabase
+            .table("attempts")
+            .select("id")
+            .eq("id", attempt_id)
+            .limit(1)
+            .execute()
+        )
+
+        if not attempt.data:
+            raise HTTPException(
+                status_code=404,
+                detail="Attempt not found",
+            )
+
+        # ---------------------------------------------
+        # Get responses
+        # ---------------------------------------------
+
         result = (
             supabase
             .table("responses")
@@ -199,6 +299,9 @@ def get_responses(attempt_id: str):
 
         return result.data or []
 
+    except HTTPException:
+        raise
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -206,9 +309,15 @@ def get_responses(attempt_id: str):
         )
 
 
-@router.post("/{attempt_id}/submit")
+@router.post(
+    "/{attempt_id}/submit"
+)
 def submit_attempt(attempt_id: str):
     try:
+        # ---------------------------------------------
+        # Get attempt
+        # ---------------------------------------------
+
         attempt = (
             supabase
             .table("attempts")
@@ -226,17 +335,34 @@ def submit_attempt(attempt_id: str):
 
         attempt_data = attempt.data[0]
 
-        if attempt_data["status"] == "completed":
+        # ---------------------------------------------
+        # Prevent duplicate submission
+        # ---------------------------------------------
+
+        if (
+            attempt_data["status"]
+            == "completed"
+        ):
             raise HTTPException(
                 status_code=400,
                 detail="Assessment already submitted",
             )
 
-        score = calculate_score(attempt_id)
+        # ---------------------------------------------
+        # Calculate score
+        # ---------------------------------------------
+
+        score = calculate_score(
+            attempt_id
+        )
 
         completed_at = datetime.now(
             timezone.utc
         ).isoformat()
+
+        # ---------------------------------------------
+        # Mark attempt completed
+        # ---------------------------------------------
 
         updated = (
             supabase
@@ -250,8 +376,11 @@ def submit_attempt(attempt_id: str):
         )
 
         return {
-            "message": "Assessment submitted successfully",
+            "message":
+                "Assessment submitted successfully",
+
             "score": score,
+
             "attempt": (
                 updated.data[0]
                 if updated.data
@@ -271,5 +400,8 @@ def submit_attempt(attempt_id: str):
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to submit assessment: {str(e)}",
+            detail=(
+                "Failed to submit assessment: "
+                f"{str(e)}"
+            ),
         )
