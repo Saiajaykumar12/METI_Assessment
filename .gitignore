@@ -1,0 +1,5 @@
+# Ignore all environment variable files anywhere in the project
+.env
+.env.local
+backend/.env
+frontend/.env
