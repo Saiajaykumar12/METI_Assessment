@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 
 from app.db.database import supabase
 from app.schemas.candidate import CandidateCreate
+from app.core.auth import get_current_user
+
 
 router = APIRouter(
     prefix="/candidates",
@@ -10,8 +12,13 @@ router = APIRouter(
 
 
 @router.post("")
-def create_candidate(request: CandidateCreate):
+def create_candidate(
+    request: CandidateCreate,
+    user=Depends(get_current_user)
+):
+
     candidate_data = {
+        "user_id": user.id,
         "full_name": request.full_name,
         "country": request.country,
         "city": request.city,
@@ -31,7 +38,7 @@ def create_candidate(request: CandidateCreate):
     if not result.data:
         raise HTTPException(
             status_code=400,
-            detail="Could not create candidate",
+            detail="Could not create candidate"
         )
 
     return result.data[0]

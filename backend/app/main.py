@@ -5,11 +5,17 @@ from app.api.v1.assessments import router as assessments_router
 from app.api.v1.attempts import router as attempts_router
 from app.api.v1.candidates import router as candidates_router
 from app.db.database import supabase
+from app.api.v1.resumes import router as resumes_router
 
 
 app = FastAPI(
     title="METI Assessment API",
     version="1.0.0",
+)
+
+app.include_router(
+    resumes_router,
+    prefix="/api/v1",
 )
 
 
