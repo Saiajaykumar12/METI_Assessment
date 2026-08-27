@@ -4,8 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.assessments import router as assessments_router
 from app.api.v1.attempts import router as attempts_router
 from app.api.v1.candidates import router as candidates_router
-from app.db.database import supabase
 from app.api.v1.resumes import router as resumes_router
+from app.db.database import supabase
 
 
 app = FastAPI(
@@ -13,15 +13,13 @@ app = FastAPI(
     version="1.0.0",
 )
 
-app.include_router(
-    resumes_router,
-    prefix="/api/v1",
-)
-
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -40,6 +38,11 @@ app.include_router(
 
 app.include_router(
     attempts_router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    resumes_router,
     prefix="/api/v1",
 )
 

@@ -1,7 +1,10 @@
 import { useState } from "react";
-import { createCandidate } from "../services/api";
+import {
+  createCandidate,
+  uploadResume,
+} from "../services/api";
 
-export default function Home({ onCandidateCreated }) {
+export default function Home({ onStart }) {
   const [form, setForm] = useState({
     full_name: "",
     country: "",
@@ -12,6 +15,7 @@ export default function Home({ onCandidateCreated }) {
     career_goal: "",
   });
 
+  const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -30,13 +34,29 @@ export default function Home({ onCandidateCreated }) {
   async function handleSubmit(e) {
     e.preventDefault();
 
+    if (!file) {
+      setError("Please upload your resume.");
+      return;
+    }
+
     setLoading(true);
     setError("");
 
     try {
       const candidate = await createCandidate(form);
 
-      onCandidateCreated(candidate);
+      const result = await uploadResume(
+        file,
+        candidate.id
+      );
+
+      const assessment = {
+        id: result.assessment.assessment_id,
+        name: "AI Generated Assessment",
+        ...result.assessment,
+      };
+
+      onStart(candidate, assessment);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -54,7 +74,7 @@ export default function Home({ onCandidateCreated }) {
           </h1>
 
           <p className="mt-3 text-slate-500">
-            Complete your candidate information to begin.
+            Enter your details and upload your resume.
           </p>
         </div>
 
@@ -127,12 +147,27 @@ export default function Home({ onCandidateCreated }) {
               value={form.career_goal}
               onChange={handleChange}
               required
-              rows="4"
-              className="rounded-lg border p-3"
+              className="min-h-28 rounded-lg border p-3"
             />
 
+            <div>
+              <label className="mb-2 block font-medium">
+                Upload Resume
+              </label>
+
+              <input
+                type="file"
+                accept=".pdf"
+                onChange={(e) =>
+                  setFile(e.target.files?.[0] || null)
+                }
+                required
+                className="w-full rounded-lg border p-3"
+              />
+            </div>
+
             {error && (
-              <p className="rounded-lg bg-red-50 p-3 text-red-600">
+              <p className="text-sm text-red-600">
                 {error}
               </p>
             )}
@@ -140,9 +175,11 @@ export default function Home({ onCandidateCreated }) {
             <button
               type="submit"
               disabled={loading}
-              className="rounded-lg bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+              className="rounded-lg bg-slate-900 px-5 py-3 font-medium text-white disabled:opacity-50"
             >
-              {loading ? "Creating..." : "Continue"}
+              {loading
+                ? "Generating Assessment..."
+                : "Continue"}
             </button>
 
           </div>

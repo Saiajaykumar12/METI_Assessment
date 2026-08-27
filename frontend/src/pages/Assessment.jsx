@@ -37,7 +37,7 @@ export default function Assessment({
         const [questionData, attemptData] =
           await Promise.all([
             getQuestions(assessment.id),
-            createAttempt(assessment?.id, candidate?.id),
+           createAttempt(assessment.id),
           ]);
 
         setQuestions(questionData);

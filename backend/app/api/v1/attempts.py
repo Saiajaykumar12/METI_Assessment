@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from app.services.scoring import calculate_score
 from datetime import datetime, timezone
+from uuid import UUID
 
 from app.db.database import supabase
 from app.schemas.attempts import (
@@ -16,37 +17,24 @@ router = APIRouter(
 
 @router.post("")
 def create_attempt(
-    assessment_id: str,
-    request: CreateAttemptRequest,
+    assessment_id: UUID,
 ):
-    assessment = (
+    result = (
         supabase
-        .table("assessments")
-        .select("*")
-        .eq("id", assessment_id)
-        .single()
-        .execute()
-    )
-
-    if not assessment.data:
-        raise HTTPException(
-            status_code=404,
-            detail="Assessment not found",
-        )
-
-    attempt = (
-        supabase
-        .table("assessment_attempts")
+        .table("attempts")
         .insert({
-            "candidate_id": request.candidate_id,
-            "assessment_id": assessment_id,
-            "assessment_version": assessment.data["version"],
-            "status": "in_progress",
+            "assessment_id": str(assessment_id)
         })
         .execute()
     )
 
-    return attempt.data[0]
+    if not result.data:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not create attempt"
+        )
+
+    return result.data[0]
 
 
 @router.get("/{attempt_id}")
