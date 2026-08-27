@@ -6,7 +6,7 @@ import {
 } from "react";
 
 import QuestionCard from "../components/QuestionCard";
-import ProgressBar from "../components/Progressbar";
+import ProgressBar from "../components/ProgressBar";
 
 import {
   createAttempt,
@@ -33,7 +33,7 @@ export default function Assessment({
   const [error, setError] = useState("");
 
   const saveTimers = useRef({});
-  const mountedRef = useRef(false);
+  const saveQueue = useRef(Promise.resolve());
 
   const assessmentId =
     assessment?.id ||
@@ -112,6 +112,8 @@ export default function Assessment({
       return;
     }
 
+    let cancelled = false;
+
     async function startAssessment() {
       try {
         setLoading(true);
@@ -129,12 +131,16 @@ export default function Assessment({
           );
         }
 
+        if (cancelled) {
+          return;
+        }
+
         setQuestions(questionData);
 
         /*
-         * Try to reuse an existing attempt from
-         * localStorage first.
+         * Try to reuse an existing attempt.
          */
+
         let currentAttempt = null;
 
         try {
@@ -162,9 +168,9 @@ export default function Assessment({
         }
 
         /*
-         * If no saved attempt exists, ask backend
-         * to create/reuse an in-progress attempt.
+         * Create attempt if no saved attempt exists.
          */
+
         if (!currentAttempt) {
           currentAttempt =
             await createAttempt(
@@ -179,17 +185,22 @@ export default function Assessment({
           );
         }
 
+        if (cancelled) {
+          return;
+        }
+
         setAttempt(currentAttempt);
 
         /*
-         * Save the attempt immediately.
+         * Save progress.
          */
+
         const savedProgress = {
           candidateId,
           assessmentId,
           attemptId: currentAttempt.id,
-          current,
-          answers,
+          current: 0,
+          answers: {},
         };
 
         localStorage.setItem(
@@ -197,6 +208,10 @@ export default function Assessment({
           JSON.stringify(savedProgress)
         );
       } catch (err) {
+        if (cancelled) {
+          return;
+        }
+
         console.error(
           "Assessment start error:",
           err
@@ -207,11 +222,17 @@ export default function Assessment({
             "Failed to start assessment."
         );
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
 
     startAssessment();
+
+    return () => {
+      cancelled = true;
+    };
   }, [candidateId, assessmentId]);
 
   /*
@@ -269,7 +290,7 @@ export default function Assessment({
 
   /*
    * --------------------------------------------------
-   * Save one response
+   * Save answer to backend
    * --------------------------------------------------
    */
 
@@ -285,11 +306,17 @@ export default function Assessment({
         );
       }
 
-      await saveResponse(
-        attemptId,
-        questionId,
-        answer
-      );
+      saveQueue.current = saveQueue.current
+        .catch(() => undefined)
+        .then(() =>
+          saveResponse(
+            attemptId,
+            questionId,
+            answer
+          )
+        );
+
+      await saveQueue.current;
     },
     []
   );
@@ -298,36 +325,19 @@ export default function Assessment({
    * --------------------------------------------------
    * Handle answer
    * --------------------------------------------------
-   *
-   * MCQ:
-   *     Save immediately.
-   *
-   * Text:
-   *     Update UI immediately.
-   *     Save 1 second after typing stops.
    */
 
-  async function handleAnswer(answer) {
-    const question =
-      questions[current];
+  function handleAnswer(answer) {
+    const question = questions[current];
 
     if (!question) {
-      return;
-    }
-
-    const attemptId =
-      attempt?.id;
-
-    if (!attemptId) {
-      setError(
-        "Assessment attempt is not ready."
-      );
       return;
     }
 
     /*
      * Update UI immediately.
      */
+
     setAnswers((previous) => ({
       ...previous,
       [question.id]: answer,
@@ -336,72 +346,26 @@ export default function Assessment({
     setError("");
 
     /*
-     * Clear previous debounce timer for
-     * this specific question.
+     * Save answer.
+     *
+     * This is intentionally done immediately.
+     * The backend should update the existing
+     * response if the same question is answered
+     * again.
      */
-    if (
-      saveTimers.current[question.id]
-    ) {
-      clearTimeout(
-        saveTimers.current[question.id]
+
+    if (!attempt?.id) {
+      setError(
+        "Assessment attempt is not ready."
       );
-    }
-
-    const isTextQuestion =
-      question.question_type !== "mcq";
-
-    /*
-     * ----------------------------------------------
-     * TEXT QUESTION
-     * ----------------------------------------------
-     */
-
-    if (isTextQuestion) {
-      saveTimers.current[question.id] =
-        setTimeout(async () => {
-          try {
-            await saveAnswerToBackend(
-              question.id,
-              answer,
-              attemptId
-            );
-
-            setError("");
-          } catch (err) {
-            console.error(
-              "Failed to autosave text answer:",
-              err
-            );
-
-            setError(
-              err?.message ||
-                "Failed to save response."
-            );
-          } finally {
-            delete saveTimers.current[
-              question.id
-            ];
-          }
-        }, 1000);
-
       return;
     }
 
-    /*
-     * ----------------------------------------------
-     * MCQ
-     * ----------------------------------------------
-     */
-
-    try {
-      await saveAnswerToBackend(
-        question.id,
-        answer,
-        attemptId
-      );
-
-      setError("");
-    } catch (err) {
+    saveAnswerToBackend(
+      question.id,
+      answer,
+      attempt.id
+    ).catch((err) => {
       console.error(
         "Failed to save answer:",
         err
@@ -411,12 +375,12 @@ export default function Assessment({
         err?.message ||
           "Failed to save answer."
       );
-    }
+    });
   }
 
   /*
    * --------------------------------------------------
-   * Flush pending text save
+   * Flush current answer
    * --------------------------------------------------
    */
 
@@ -440,8 +404,9 @@ export default function Assessment({
     }
 
     /*
-     * Cancel debounce timer.
+     * Cancel pending timer.
      */
+
     if (
       saveTimers.current[question.id]
     ) {
@@ -455,9 +420,9 @@ export default function Assessment({
     }
 
     /*
-     * Always save the latest answer before
-     * navigation.
+     * Save latest answer.
      */
+
     await saveAnswerToBackend(
       question.id,
       answer,
@@ -526,8 +491,9 @@ export default function Assessment({
       answers[question.id];
 
     /*
-     * Empty answer check.
+     * Require answer.
      */
+
     if (
       answer === undefined ||
       answer === null ||
@@ -551,15 +517,16 @@ export default function Assessment({
       setError("");
 
       /*
-       * IMPORTANT:
-       * Always save latest answer before
+       * Save the latest answer before
        * moving forward.
        */
+
       await flushCurrentAnswer();
 
       /*
-       * Move to next question.
+       * Next question.
        */
+
       if (
         current <
         questions.length - 1
@@ -572,9 +539,9 @@ export default function Assessment({
       }
 
       /*
-       * ----------------------------------------------
+       * --------------------------------------------------
        * LAST QUESTION
-       * ----------------------------------------------
+       * --------------------------------------------------
        */
 
       const result =
@@ -583,13 +550,20 @@ export default function Assessment({
         );
 
       /*
-       * Assessment completed.
+       * Remove saved progress.
        */
+
       localStorage.removeItem(
         STORAGE_KEY
       );
 
-      onComplete(result);
+      /*
+       * Notify parent component.
+       */
+
+      if (onComplete) {
+        onComplete(result);
+      }
     } catch (err) {
       console.error(
         "Failed to save or submit assessment:",
@@ -614,8 +588,8 @@ export default function Assessment({
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p>
-          Generating your assessment...
+        <p className="text-slate-600">
+          Loading your assessment...
         </p>
       </div>
     );
@@ -623,7 +597,7 @@ export default function Assessment({
 
   /*
    * --------------------------------------------------
-   * Error
+   * Error before questions load
    * --------------------------------------------------
    */
 
@@ -633,8 +607,8 @@ export default function Assessment({
   ) {
     return (
       <div className="flex min-h-screen items-center justify-center px-6">
-        <div className="rounded-lg bg-red-50 p-6 text-red-600">
-          {error}
+        <div className="w-full max-w-lg rounded-lg bg-red-50 p-6 text-red-600">
+          <p>{error}</p>
         </div>
       </div>
     );
@@ -649,7 +623,7 @@ export default function Assessment({
   if (!questions.length) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p>
+        <p className="text-slate-600">
           No questions available.
         </p>
       </div>
@@ -668,7 +642,7 @@ export default function Assessment({
   if (!question) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p>
+        <p className="text-slate-600">
           Question not found.
         </p>
       </div>
@@ -683,9 +657,10 @@ export default function Assessment({
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10">
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto max-w-4xl">
 
         {/* Header */}
+
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-slate-900">
             {assessment?.name ||
@@ -698,66 +673,122 @@ export default function Assessment({
         </div>
 
         {/* Progress */}
+
         <ProgressBar
           current={current}
           total={questions.length}
         />
 
-        {/* Question */}
-        <QuestionCard
-          question={question}
-          answer={
-            answers[question.id] ?? ""
-          }
-          onAnswer={handleAnswer}
-        />
+        <div className="grid gap-6 lg:grid-cols-4">
+          {/* Main Question Area */}
+          <div className="lg:col-span-3">
+            {/* Question */}
 
-        {/* Error */}
-        {error && (
-          <p className="mt-4 text-sm text-red-600">
-            {error}
-          </p>
-        )}
+            <QuestionCard
+              question={question}
+              answer={
+                answers[question.id] ?? ""
+              }
+              onAnswer={handleAnswer}
+            />
 
-        {/* Navigation */}
-        <div className="mt-6 flex items-center justify-between gap-4">
+            {/* Error */}
 
-          {/* Previous */}
-          <button
-            type="button"
-            onClick={previousQuestion}
-            disabled={
-              saving ||
-              current === 0
-            }
-            className="rounded-lg border border-slate-300 bg-white px-6 py-3 font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Previous
-          </button>
+            {error && (
+              <div className="mt-4 rounded-lg bg-red-50 p-3">
+                <p className="text-sm text-red-600">
+                  {error}
+                </p>
+              </div>
+            )}
 
-          {/* Next / Submit */}
-          <button
-            type="button"
-            onClick={nextQuestion}
-            disabled={saving}
-            className="rounded-lg bg-slate-900 px-8 py-3 font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving
-              ? "Saving..."
-              : current ===
-                  questions.length - 1
-                ? "Submit Assessment"
-                : "Next Question"}
-          </button>
+            {/* Navigation */}
 
-        </div>
+            <div className="mt-6 flex items-center justify-between gap-4">
 
-        {/* Counter */}
-        <div className="mt-4 text-center">
-          <p className="text-sm text-slate-500">
-            Question {current + 1} of{" "}
-            {questions.length}
-          </p>
+              {/* Previous */}
+              <button
+                type="button"
+                onClick={previousQuestion}
+                disabled={
+                  saving ||
+                  current === 0
+                }
+                className="rounded-lg border border-slate-300 bg-white px-6 py-3 font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Previous
+              </button>
+
+              {/* Next / Submit */}
+
+              <button
+                type="button"
+                onClick={nextQuestion}
+                disabled={saving}
+                className="rounded-lg bg-slate-900 px-8 py-3 font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saving
+                  ? "Saving..."
+                  : current ===
+                      questions.length - 1
+                    ? "Submit Assessment"
+                    : "Next Question"}
+              </button>
+            </div>
+
+            {/* Counter */}
+
+            <div className="mt-4 text-center">
+              <p className="text-sm text-slate-500">
+                Question {current + 1} of{" "}
+                {questions.length}
+              </p>
+            </div>
+          </div>
+
+          {/* Question Navigation Panel */}
+          <div className="hidden lg:block">
+            <div className="rounded-lg border border-slate-200 bg-white p-4 sticky top-4">
+              <h3 className="mb-4 font-semibold text-slate-900">
+                Questions
+              </h3>
+
+              <div className="space-y-2">
+                {questions.map((q, index) => (
+                  <button
+                    key={q.id}
+                    onClick={() => {
+                      if (!saving) {
+                        setCurrent(index);
+                      }
+                    }}
+                    disabled={saving}
+                    className={`w-full rounded px-3 py-2 text-sm font-medium transition ${
+                      index === current
+                        ? "bg-slate-900 text-white"
+                        : answers[q.id]
+                          ? "bg-emerald-100 text-emerald-900 hover:bg-emerald-200"
+                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    } disabled:opacity-50`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>Q{index + 1}</span>
+                      {answers[q.id] && (
+                        <span>✓</span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-6 border-t border-slate-200 pt-4">
+                <p className="text-xs text-slate-500">
+                  {Object.keys(answers).length} of{" "}
+                  {questions.length} answered
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
 
       </div>

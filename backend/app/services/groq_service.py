@@ -107,27 +107,31 @@ Return exactly this structure:
 Candidate resume:
 -------------------------
 
-{resume_text[:30000]}
+{resume_text[:12000]}
 
 -------------------------
 """
 
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert technical assessment "
+                    "generator. Return only valid JSON."
+                ),
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ]
+
         response = client.chat.completions.create(
             model="openai/gpt-oss-20b",
-            temperature=0.3,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an expert technical assessment "
-                        "generator. Return only valid JSON."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": prompt,
-                },
-            ],
+            temperature=0.2,
+            max_completion_tokens=5000,
+            response_format={"type": "json_object"},
+            messages=messages,
         )
 
         response_text = (
@@ -164,25 +168,66 @@ Candidate resume:
 
         response_text = response_text.strip()
 
-        data = json.loads(response_text)
-
-        if "sections" not in data:
-            raise ValueError(
-                "Groq response does not contain sections"
+        try:
+            data = json.loads(response_text)
+        except json.JSONDecodeError:
+            retry_response = client.chat.completions.create(
+                model="openai/gpt-oss-20b",
+                temperature=0.1,
+                max_completion_tokens=5000,
+                response_format={"type": "json_object"},
+                messages=messages,
             )
+            retry_text = (
+                retry_response.choices[0]
+                .message.content
+                or ""
+            ).strip()
+            retry_text = re.sub(
+                r"^```(?:json)?\s*|\s*```$",
+                "",
+                retry_text,
+                flags=re.IGNORECASE,
+            ).strip()
+            data = json.loads(retry_text)
 
-        if not isinstance(
-            data["sections"],
-            list,
-        ):
-            raise ValueError(
-                "Groq sections must be a list"
+        normalize_assessment_data(data)
+        try:
+            normalize_assessment_data(data)
+            validate_assessment_data(data)
+        except ValueError:
+            retry_messages = messages + [
+                {
+                    "role": "user",
+                    "content": (
+                        "Regenerate the assessment. Every section must be an "
+                        "object with title, description, and exactly four "
+                        "question objects. Return exactly three sections and "
+                        "twelve questions as valid JSON."
+                    ),
+                }
+            ]
+            retry_response = client.chat.completions.create(
+                model="openai/gpt-oss-20b",
+                temperature=0.1,
+                max_completion_tokens=5000,
+                response_format={"type": "json_object"},
+                messages=retry_messages,
             )
-
-        if not data["sections"]:
-            raise ValueError(
-                "Groq returned no assessment sections"
-            )
+            retry_text = (
+                retry_response.choices[0]
+                .message.content
+                or ""
+            ).strip()
+            retry_text = re.sub(
+                r"^```(?:json)?\s*|\s*```$",
+                "",
+                retry_text,
+                flags=re.IGNORECASE,
+            ).strip()
+            data = json.loads(retry_text)
+            normalize_assessment_data(data)
+            validate_assessment_data(data)
 
         return data
 
@@ -206,3 +251,95 @@ Candidate resume:
                 f"{str(e)}"
             ),
         )
+
+
+def normalize_assessment_data(data: dict):
+    if not isinstance(data, dict):
+        return
+
+    sections = data.get("sections", [])
+    if not isinstance(sections, list):
+        return
+
+    for section in sections:
+        if not isinstance(section, dict):
+            continue
+
+        questions = section.get("questions", [])
+        if not isinstance(questions, list):
+            continue
+
+        for question in questions:
+            if not isinstance(question, dict):
+                continue
+
+            if question.get("question_type") != "mcq":
+                continue
+
+            options = question.get("options", [])
+            correct_answer = str(
+                question.get("correct_answer", "")
+            ).strip()
+
+            for option in options:
+                if str(option).strip().casefold() == correct_answer.casefold():
+                    question["correct_answer"] = option
+                    break
+            else:
+                answer_match = re.match(
+                    r"^(?:option\s*)?([A-D])(?:[.):\s]|$)",
+                    correct_answer,
+                    flags=re.IGNORECASE,
+                )
+                if answer_match:
+                    option_index = ord(
+                        answer_match.group(1).upper()
+                    ) - ord("A")
+                    if option_index < len(options):
+                        question["correct_answer"] = options[option_index]
+
+
+def validate_assessment_data(data: dict):
+    sections = data.get("sections")
+
+    if not isinstance(sections, list) or len(sections) != 3:
+        raise ValueError("Assessment must contain exactly 3 sections")
+
+    question_count = 0
+
+    for section in sections:
+        if not isinstance(section, dict):
+            raise ValueError("Assessment sections must be objects")
+
+        if not isinstance(section.get("title"), str) or not section["title"].strip():
+            raise ValueError("Every section must have a title")
+
+        questions = section.get("questions")
+        if not isinstance(questions, list) or len(questions) != 4:
+            raise ValueError("Every section must contain exactly 4 questions")
+
+        for question in questions:
+            if not isinstance(question, dict):
+                raise ValueError("Assessment questions must be objects")
+
+            question_type = question.get("question_type")
+            if question_type not in {"mcq", "text", "coding"}:
+                raise ValueError("Assessment contains an invalid question type")
+
+            question_text = question.get("question_text")
+            if not isinstance(question_text, str) or not question_text.strip():
+                raise ValueError("Every question must have question text")
+
+            options = question.get("options")
+            if question_type == "mcq":
+                if not isinstance(options, list) or len(options) != 4:
+                    raise ValueError("MCQ questions must contain exactly 4 options")
+                if question.get("correct_answer") not in options:
+                    raise ValueError("MCQ correct answer must match an option")
+            elif options != []:
+                raise ValueError("Text and coding questions cannot contain options")
+
+            question_count += 1
+
+    if question_count != 12:
+        raise ValueError("Assessment must contain exactly 12 questions")

@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from app.db.database import supabase
+from app.core.auth import get_current_user, get_owned_assessment
+from app.db.database import admin_supabase
 
 
 router = APIRouter(
@@ -10,12 +11,25 @@ router = APIRouter(
 
 
 @router.get("")
-def get_assessments():
+def get_assessments(user=Depends(get_current_user)):
     try:
+        candidates = (
+            admin_supabase
+            .table("candidates")
+            .select("id")
+            .eq("user_id", str(user.id))
+            .execute()
+        )
+        candidate_ids = [item["id"] for item in (candidates.data or [])]
+
+        if not candidate_ids:
+            return []
+
         result = (
-            supabase
+            admin_supabase
             .table("assessments")
             .select("*")
+            .in_("candidate_id", candidate_ids)
             .in_("status", ["active", "published"])
             .order("created_at", desc=True)
             .execute()
@@ -31,25 +45,15 @@ def get_assessments():
 
 
 @router.get("/{assessment_id}/questions")
-def get_questions(assessment_id: str):
+def get_questions(
+    assessment_id: str,
+    user=Depends(get_current_user),
+):
     try:
-        assessment = (
-            supabase
-            .table("assessments")
-            .select("id")
-            .eq("id", assessment_id)
-            .limit(1)
-            .execute()
-        )
-
-        if not assessment.data:
-            raise HTTPException(
-                status_code=404,
-                detail="Assessment not found",
-            )
+        get_owned_assessment(assessment_id, user)
 
         sections_result = (
-            supabase
+            admin_supabase
             .table("assessment_sections")
             .select("id, display_order")
             .eq("assessment_id", assessment_id)
@@ -68,7 +72,7 @@ def get_questions(assessment_id: str):
         ]
 
         questions_result = (
-            supabase
+            admin_supabase
             .table("questions")
             .select("*")
             .in_("section_id", section_ids)

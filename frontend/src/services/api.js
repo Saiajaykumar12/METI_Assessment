@@ -2,7 +2,6 @@ import { supabase } from "./supabase";
 
 const API_URL = "http://127.0.0.1:8000/api/v1";
 
-
 async function getAuthHeaders() {
   const {
     data: { session },
@@ -17,14 +16,10 @@ async function getAuthHeaders() {
   };
 }
 
-
-async function handleResponse(
-  response,
-  defaultMessage
-) {
+async function handleResponse(response, defaultMessage) {
   const text = await response.text();
 
-  let data = {};
+  let data;
 
   try {
     data = text ? JSON.parse(text) : {};
@@ -47,21 +42,17 @@ async function handleResponse(
   return data;
 }
 
-
 export async function createCandidate(data) {
   const authHeaders = await getAuthHeaders();
 
-  const response = await fetch(
-    `${API_URL}/candidates`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...authHeaders,
-      },
-      body: JSON.stringify(data),
-    }
-  );
+  const response = await fetch(`${API_URL}/candidates`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders,
+    },
+    body: JSON.stringify(data),
+  });
 
   return handleResponse(
     response,
@@ -69,18 +60,14 @@ export async function createCandidate(data) {
   );
 }
 
-
 export async function getAssessments() {
   const authHeaders = await getAuthHeaders();
 
-  const response = await fetch(
-    `${API_URL}/assessments`,
-    {
-      headers: {
-        ...authHeaders,
-      },
-    }
-  );
+  const response = await fetch(`${API_URL}/assessments`, {
+    headers: {
+      ...authHeaders,
+    },
+  });
 
   return handleResponse(
     response,
@@ -88,10 +75,7 @@ export async function getAssessments() {
   );
 }
 
-
-export async function getQuestions(
-  assessmentId
-) {
+export async function getQuestions(assessmentId) {
   const authHeaders = await getAuthHeaders();
 
   const response = await fetch(
@@ -109,7 +93,6 @@ export async function getQuestions(
   );
 }
 
-
 export async function createAttempt(
   assessmentId,
   candidateId
@@ -118,29 +101,21 @@ export async function createAttempt(
 
   const url =
     `${API_URL}/attempts` +
-    `?assessment_id=${encodeURIComponent(
-      assessmentId
-    )}` +
-    `&candidate_id=${encodeURIComponent(
-      candidateId
-    )}`;
+    `?assessment_id=${encodeURIComponent(assessmentId)}` +
+    `&candidate_id=${encodeURIComponent(candidateId)}`;
 
-  const response = await fetch(
-    url,
-    {
-      method: "POST",
-      headers: {
-        ...authHeaders,
-      },
-    }
-  );
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...authHeaders,
+    },
+  });
 
   return handleResponse(
     response,
     "Failed to create attempt"
   );
 }
-
 
 export async function saveResponse(
   attemptId,
@@ -169,10 +144,7 @@ export async function saveResponse(
   );
 }
 
-
-export async function submitAssessment(
-  attemptId
-) {
+export async function submitAssessment(attemptId) {
   const authHeaders = await getAuthHeaders();
 
   const response = await fetch(
@@ -190,7 +162,6 @@ export async function submitAssessment(
     "Failed to submit assessment"
   );
 }
-
 
 export async function uploadResume(
   file,
@@ -218,5 +189,59 @@ export async function uploadResume(
   return handleResponse(
     response,
     "Failed to upload resume"
+  );
+}
+
+export async function getAttempt(attemptId) {
+  const authHeaders = await getAuthHeaders();
+
+  const response = await fetch(
+    `${API_URL}/attempts/${attemptId}`,
+    {
+      headers: {
+        ...authHeaders,
+      },
+    }
+  );
+
+  return handleResponse(
+    response,
+    "Failed to fetch attempt"
+  );
+}
+
+export async function getResponses(attemptId) {
+  const authHeaders = await getAuthHeaders();
+
+  const response = await fetch(
+    `${API_URL}/attempts/${attemptId}/responses`,
+    {
+      headers: {
+        ...authHeaders,
+      },
+    }
+  );
+
+  return handleResponse(
+    response,
+    "Failed to fetch responses"
+  );
+}
+
+export async function getDashboard(candidateId) {
+  const authHeaders = await getAuthHeaders();
+
+  const response = await fetch(
+    `${API_URL}/attempts/candidate/${candidateId}/results`,
+    {
+      headers: {
+        ...authHeaders,
+      },
+    }
+  );
+
+  return handleResponse(
+    response,
+    "Failed to fetch dashboard"
   );
 }

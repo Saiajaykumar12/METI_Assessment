@@ -1,4 +1,4 @@
-import io
+﻿import io
 import json
 import re
 import uuid
@@ -13,7 +13,7 @@ from fastapi import (
 )
 
 from app.core.auth import get_current_user
-from app.db.database import supabase
+from app.db.database import supabase, admin_supabase
 from app.core.config import settings
 
 
@@ -72,7 +72,7 @@ def create_assessment(
     }
 
     assessment_result = (
-        supabase
+        admin_supabase
         .table("assessments")
         .insert(assessment_data)
         .execute()
@@ -119,7 +119,7 @@ def create_assessment(
         }
 
         section_result = (
-            supabase
+            admin_supabase
             .table("assessment_sections")
             .insert(section_data)
             .execute()
@@ -189,7 +189,7 @@ def create_assessment(
             }
 
             question_result = (
-                supabase
+                admin_supabase
                 .table("questions")
                 .insert(question_data)
                 .execute()
@@ -289,6 +289,7 @@ async def upload_resume(
 
     resume_data = {
         "id": resume_id,
+        "user_id": user_id,
         "candidate_id": candidate_id,
         "file_name": file.filename,
         "file_type": file.content_type,
@@ -300,7 +301,7 @@ async def upload_resume(
 
     try:
         result = (
-            supabase
+            admin_supabase
             .table("resumes")
             .insert(resume_data)
             .execute()

@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from app.db.database import supabase
+from app.db.database import admin_supabase as supabase
 
 
 def calculate_score(attempt_id: str):
@@ -85,11 +85,25 @@ def calculate_score(attempt_id: str):
             max_question_score = score_value
 
         elif question["question_type"] == "text":
-            score = 0
+            # For text questions, give credit if answer is provided and has meaningful length
+            answer_str = str(answer or "").strip()
+            score = (
+                score_value
+                if len(answer_str) >= 10
+                else int(score_value * 0.25)
+            )
             max_question_score = score_value
 
         elif question["question_type"] == "coding":
-            score = 0
+            # For coding questions, give credit if answer is provided and has meaningful length
+            answer_str = str(answer or "").strip()
+            score = (
+                int(score_value * 0.75)
+                if len(answer_str) >= 20
+                else int(score_value * 0.25)
+                if len(answer_str) >= 5
+                else 0
+            )
             max_question_score = score_value
 
         else:

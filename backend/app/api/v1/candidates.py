@@ -1,3 +1,4 @@
+from app.db.database import admin_supabase as supabase
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.auth import get_current_user

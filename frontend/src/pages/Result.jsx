@@ -1,4 +1,7 @@
-export default function Result({ result }) {
+export default function Result({
+  result,
+  onBack,
+}) {
   if (!result) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 px-6">
@@ -27,9 +30,10 @@ export default function Result({ result }) {
 
   const score = result.score || result;
 
+  // Try to use CPI first, fall back to overall_score
   const overallScore = Math.min(
     Math.max(
-      Number(score.overall_score ?? 0),
+      Number(score.cpi ?? score.overall_score ?? 0),
       0
     ),
     100
@@ -541,6 +545,15 @@ export default function Result({ result }) {
             Thank you for completing the assessment.
             Your responses and results have been recorded successfully.
           </p>
+
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="mt-6 rounded-lg bg-white px-6 py-2 font-semibold text-slate-900 transition hover:bg-slate-100"
+            >
+              Back to Dashboard
+            </button>
+          )}
 
         </div>
 
