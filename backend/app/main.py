@@ -1,10 +1,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1.assessments import router as assessments_router
-from app.api.v1.attempts import router as attempts_router
-from app.api.v1.candidates import router as candidates_router
-from app.api.v1.resumes import router as resumes_router
+from app.api.v1.assessments import (
+    router as assessments_router,
+)
+from app.api.v1.attempts import (
+    router as attempts_router,
+)
+from app.api.v1.candidates import (
+    router as candidates_router,
+)
+from app.api.v1.resumes import (
+    router as resumes_router,
+)
+
 from app.db.database import supabase
 
 
@@ -50,7 +59,11 @@ app.include_router(
 @app.get("/health")
 def health_check():
     try:
-        supabase.table("assessments").select("id").limit(1).execute()
+        supabase.table(
+            "assessments"
+        ).select(
+            "id"
+        ).limit(1).execute()
 
         return {
             "status": "ok",

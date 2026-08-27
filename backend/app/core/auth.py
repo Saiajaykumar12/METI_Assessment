@@ -18,7 +18,13 @@ def get_current_user(
             detail="Invalid authorization header",
         )
 
-    token = authorization.replace("Bearer ", "")
+    token = authorization.split(" ", 1)[1].strip()
+
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token",
+        )
 
     try:
         response = supabase.auth.get_user(token)
@@ -31,8 +37,11 @@ def get_current_user(
 
         return response.user
 
-    except Exception:
+    except HTTPException:
+        raise
+
+    except Exception as e:
         raise HTTPException(
             status_code=401,
-            detail="Invalid or expired token",
+            detail=f"Invalid or expired token: {str(e)}",
         )

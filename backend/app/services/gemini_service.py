@@ -10,8 +10,11 @@ client = genai.Client(
 
 def generate_questions(prompt: str) -> str:
     response = client.models.generate_content(
-        model="gemini-3.7-flash",
+        model="gemini-2.5-flash",
         contents=prompt,
     )
+
+    if not response.text:
+        raise RuntimeError("Gemini returned an empty response")
 
     return response.text

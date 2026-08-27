@@ -7,12 +7,10 @@ import Assessment from "./pages/Assessment";
 import Result from "./pages/Result";
 
 import { supabase } from "./services/supabase";
-import { getAssessments } from "./services/api";
 
 
 function App() {
   const [session, setSession] = useState(null);
-
   const [page, setPage] = useState("loading");
 
   const [candidate, setCandidate] = useState(null);
@@ -35,21 +33,29 @@ function App() {
       }
 
       setSession(session);
-      setPage(session ? "home" : "login");
+      setPage(
+        session
+          ? "home"
+          : "login"
+      );
     }
 
     loadSession();
 
-
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-        setPage(session ? "home" : "login");
-      }
-    );
+    } =
+      supabase.auth.onAuthStateChange(
+        (_event, session) => {
+          setSession(session);
 
+          if (session) {
+            setPage("home");
+          } else {
+            setPage("login");
+          }
+        }
+      );
 
     return () => {
       mounted = false;
@@ -58,30 +64,26 @@ function App() {
   }, []);
 
 
-  async function handleCandidateCreated(candidateData) {
-    try {
-      setError("");
+  function handleStart(
+    candidateData,
+    assessmentData
+  ) {
+    setError("");
 
-      setCandidate(candidateData);
+    setCandidate(candidateData);
+    setAssessment(assessmentData);
 
-      const assessments = await getAssessments();
+    localStorage.setItem(
+      "candidate_id",
+      candidateData.id
+    );
 
-      if (!assessments?.length) {
-        setError(
-          "No published assessments are available."
-        );
-        return;
-      }
+    localStorage.setItem(
+      "assessment_id",
+      assessmentData.id
+    );
 
-      setAssessment(assessments[0]);
-      setPage("assessment");
-
-    } catch (err) {
-      setError(
-        err.message ||
-        "Failed to load assessment"
-      );
-    }
+    setPage("assessment");
   }
 
 
@@ -93,6 +95,14 @@ function App() {
 
   async function logout() {
     await supabase.auth.signOut();
+
+    localStorage.removeItem(
+      "candidate_id"
+    );
+
+    localStorage.removeItem(
+      "assessment_id"
+    );
 
     setSession(null);
     setCandidate(null);
@@ -139,7 +149,7 @@ function App() {
 
       {page === "home" && (
         <Home
-          onCandidateCreated={handleCandidateCreated}
+          onStart={handleStart}
         />
       )}
 
@@ -155,9 +165,12 @@ function App() {
         )}
 
 
-      {page === "result" && result && (
-        <Result result={result} />
-      )}
+      {page === "result" &&
+        result && (
+          <Result
+            result={result}
+          />
+        )}
     </>
   );
 }

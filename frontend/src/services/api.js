@@ -18,21 +18,33 @@ async function getAuthHeaders() {
 }
 
 
-async function handleResponse(response, defaultMessage) {
-  if (!response.ok) {
-    let message = defaultMessage;
+async function handleResponse(
+  response,
+  defaultMessage
+) {
+  const text = await response.text();
 
-    try {
-      const error = await response.json();
-      message = error.detail || defaultMessage;
-    } catch {
-      // Ignore JSON parsing errors
-    }
+  let data = {};
 
-    throw new Error(message);
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = {};
   }
 
-  return response.json();
+  if (!response.ok) {
+    const detail = data?.detail;
+
+    throw new Error(
+      typeof detail === "string"
+        ? detail
+        : detail
+          ? JSON.stringify(detail)
+          : defaultMessage
+    );
+  }
+
+  return data;
 }
 
 
@@ -77,7 +89,9 @@ export async function getAssessments() {
 }
 
 
-export async function getQuestions(assessmentId) {
+export async function getQuestions(
+  assessmentId
+) {
   const authHeaders = await getAuthHeaders();
 
   const response = await fetch(
@@ -102,17 +116,22 @@ export async function createAttempt(
 ) {
   const authHeaders = await getAuthHeaders();
 
+  const url =
+    `${API_URL}/attempts` +
+    `?assessment_id=${encodeURIComponent(
+      assessmentId
+    )}` +
+    `&candidate_id=${encodeURIComponent(
+      candidateId
+    )}`;
+
   const response = await fetch(
-    `${API_URL}/attempts?assessment_id=${assessmentId}`,
+    url,
     {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
         ...authHeaders,
       },
-      body: JSON.stringify({
-        candidate_id: candidateId,
-      }),
     }
   );
 
@@ -151,7 +170,9 @@ export async function saveResponse(
 }
 
 
-export async function submitAssessment(attemptId) {
+export async function submitAssessment(
+  attemptId
+) {
   const authHeaders = await getAuthHeaders();
 
   const response = await fetch(
@@ -170,14 +191,21 @@ export async function submitAssessment(attemptId) {
   );
 }
 
-export async function uploadResume(file, candidateId) {
+
+export async function uploadResume(
+  file,
+  candidateId
+) {
   const authHeaders = await getAuthHeaders();
 
   const formData = new FormData();
+
   formData.append("file", file);
 
   const response = await fetch(
-    `${API_URL}/resumes/upload?candidate_id=${candidateId}`,
+    `${API_URL}/resumes/upload?candidate_id=${encodeURIComponent(
+      candidateId
+    )}`,
     {
       method: "POST",
       headers: {

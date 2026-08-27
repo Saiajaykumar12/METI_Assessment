@@ -3,8 +3,15 @@ import json
 import re
 import uuid
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import (
+    APIRouter,
+    UploadFile,
+    File,
+    HTTPException,
+    Depends,
+)
 
+from app.core.auth import get_current_user
 from app.db.database import supabase
 from app.core.config import settings
 
@@ -15,19 +22,13 @@ router = APIRouter(
 )
 
 
-# ---------------------------------------------------------
-# PDF TEXT EXTRACTION
-# ---------------------------------------------------------
-
 def extract_pdf_text(file_bytes: bytes) -> str:
-    """
-    Extract text from a PDF resume.
-    """
-
     try:
         from pypdf import PdfReader
 
-        reader = PdfReader(io.BytesIO(file_bytes))
+        reader = PdfReader(
+            io.BytesIO(file_bytes)
+        )
 
         pages = []
 
@@ -46,15 +47,9 @@ def extract_pdf_text(file_bytes: bytes) -> str:
         )
 
 
-# ---------------------------------------------------------
-# GEMINI
-# ---------------------------------------------------------
-
-def generate_questions_with_gemini(resume_text: str):
-    """
-    Generate assessment sections and questions from the resume.
-    """
-
+def generate_questions_with_gemini(
+    resume_text: str,
+):
     try:
         from google import genai
 
@@ -65,40 +60,57 @@ def generate_questions_with_gemini(resume_text: str):
         prompt = f"""
 You are an AI technical assessment generator.
 
-Analyze the candidate resume below and create a technical assessment
-based on the candidate's actual skills, technologies, education and
-experience.
+Analyze the candidate resume and create a technical
+assessment ONLY from technologies and skills actually
+present in the resume.
 
-IMPORTANT:
-- Do not create questions about technologies that are not present
-  in the resume.
-- Questions should match the candidate's experience level.
-- Generate practical technical questions.
-- Generate multiple-choice questions where possible.
-- Generate coding/programming questions where appropriate.
-- Generate 3 sections.
-- Generate 4 questions per section.
+Generate exactly:
+- 3 sections
+- 4 questions per section
+- 12 questions total
+
+Use mainly MCQ questions.
+
+Every MCQ must contain:
+- question_code
+- question_type
+- question_text
+- options
+- correct_answer
+- competency
+- required
+
+Allowed question_type:
+mcq
+text
+coding
+
+For text and coding:
+options must be [].
+correct_answer can be "".
 
 Return ONLY valid JSON.
 
-Required JSON structure:
+Format:
 
 {{
   "sections": [
     {{
-      "title": "Section title",
-      "description": "Short description",
+      "title": "Python",
+      "description": "Python technical knowledge",
       "questions": [
         {{
           "question_code": "Q1",
           "question_type": "mcq",
-          "question_text": "Question text",
+          "question_text": "Question",
           "options": [
-            "Option A",
-            "Option B",
-            "Option C",
-            "Option D"
+            "A",
+            "B",
+            "C",
+            "D"
           ],
+          "correct_answer": "A",
+          "competency": "Python",
           "required": true
         }}
       ]
@@ -106,16 +118,7 @@ Required JSON structure:
   ]
 }}
 
-Allowed question_type values:
-
-- mcq
-- text
-- coding
-
-For coding/text questions, options must be [].
-
 Candidate resume:
-
 -------------------------
 {resume_text[:30000]}
 -------------------------
@@ -126,9 +129,10 @@ Candidate resume:
             contents=prompt,
         )
 
-        response_text = response.text.strip()
+        response_text = (
+            response.text or ""
+        ).strip()
 
-        # Remove markdown code fences if Gemini returns them
         response_text = re.sub(
             r"^```json\s*",
             "",
@@ -151,7 +155,9 @@ Candidate resume:
         data = json.loads(response_text)
 
         if "sections" not in data:
-            raise ValueError("Gemini response does not contain sections")
+            raise ValueError(
+                "Gemini response does not contain sections"
+            )
 
         return data
 
@@ -164,27 +170,29 @@ Candidate resume:
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Gemini question generation failed: {str(e)}",
+            detail=(
+                "Gemini question generation failed: "
+                f"{str(e)}"
+            ),
         )
 
 
-# ---------------------------------------------------------
-# CREATE ASSESSMENT
-# ---------------------------------------------------------
-
-def create_assessment(candidate_id: str, resume_id: str, ai_data: dict):
-
+def create_assessment(
+    candidate_id: str,
+    resume_id: str,
+    ai_data: dict,
+):
     assessment_id = str(uuid.uuid4())
-
-    # -----------------------------------------------------
-    # 1. CREATE ASSESSMENT
-    # -----------------------------------------------------
 
     assessment_data = {
         "id": assessment_id,
-        "code": f"RESUME-{assessment_id[:8].upper()}",
+        "code": (
+            f"RESUME-{assessment_id[:8].upper()}"
+        ),
         "name": "AI Generated Assessment",
-        "description": "Assessment generated from candidate resume",
+        "description": (
+            "Assessment generated from candidate resume"
+        ),
         "version": 1,
         "status": "active",
         "candidate_id": candidate_id,
@@ -204,42 +212,37 @@ def create_assessment(candidate_id: str, resume_id: str, ai_data: dict):
             detail="Failed to create assessment",
         )
 
-    # -----------------------------------------------------
-    # 2. CREATE SECTIONS
-    # -----------------------------------------------------
-
-    sections = ai_data.get("sections", [])
+    sections = ai_data.get(
+        "sections",
+        [],
+    )
 
     if not sections:
         raise HTTPException(
             status_code=500,
-            detail="Gemini did not generate assessment sections",
+            detail=(
+                "Gemini did not generate assessment sections"
+            ),
         )
 
     total_questions = 0
 
-    for section_index, section in enumerate(sections):
-
+    for section_index, section in enumerate(
+        sections
+    ):
         section_id = str(uuid.uuid4())
 
         section_data = {
             "id": section_id,
-
-            # IMPORTANT:
-            # Your Supabase column is assessment_id,
-            # NOT assessmentId.
             "assessment_id": assessment_id,
-
             "title": section.get(
                 "title",
                 f"Section {section_index + 1}",
             ),
-
             "description": section.get(
                 "description",
                 "",
             ),
-
             "display_order": section_index + 1,
         }
 
@@ -253,50 +256,64 @@ def create_assessment(candidate_id: str, resume_id: str, ai_data: dict):
         if not section_result.data:
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to create section {section_index + 1}",
+                detail=(
+                    f"Failed to create section "
+                    f"{section_index + 1}"
+                ),
             )
 
-        # -------------------------------------------------
-        # 3. CREATE QUESTIONS
-        # -------------------------------------------------
+        questions = section.get(
+            "questions",
+            [],
+        )
 
-        questions = section.get("questions", [])
+        for question_index, question in enumerate(
+            questions
+        ):
+            correct_answer = question.get(
+                "correct_answer",
+                "",
+            )
 
-        for question_index, question in enumerate(questions):
+            competency = question.get(
+                "competency",
+                section.get(
+                    "title",
+                    "General",
+                ),
+            )
 
             question_data = {
                 "id": str(uuid.uuid4()),
-
                 "section_id": section_id,
-
                 "question_code": question.get(
                     "question_code",
                     f"Q{question_index + 1}",
                 ),
-
                 "question_type": question.get(
                     "question_type",
                     "mcq",
                 ),
-
                 "question_text": question.get(
                     "question_text",
                     "",
                 ),
-
                 "options": question.get(
                     "options",
                     [],
                 ),
-
-                "scoring_config": {},
-
+                "scoring_config": {
+                    "correct": correct_answer,
+                    "competency": competency,
+                    "score": 1,
+                },
                 "required": question.get(
                     "required",
                     True,
                 ),
-
-                "display_order": question_index + 1,
+                "display_order": (
+                    question_index + 1
+                ),
             }
 
             question_result = (
@@ -326,25 +343,12 @@ def create_assessment(candidate_id: str, resume_id: str, ai_data: dict):
     }
 
 
-# ---------------------------------------------------------
-# UPLOAD RESUME
-# ---------------------------------------------------------
-
 @router.post("/upload")
 async def upload_resume(
     candidate_id: str,
     file: UploadFile = File(...),
+    user=Depends(get_current_user),
 ):
-    """
-    Upload candidate resume, extract its text,
-    generate assessment using Gemini and save
-    the assessment/questions in Supabase.
-    """
-
-    # -----------------------------------------------------
-    # VALIDATE CANDIDATE ID
-    # -----------------------------------------------------
-
     try:
         uuid.UUID(candidate_id)
     except ValueError:
@@ -353,9 +357,28 @@ async def upload_resume(
             detail="Invalid candidate_id",
         )
 
-    # -----------------------------------------------------
-    # VALIDATE FILE
-    # -----------------------------------------------------
+    user_id = str(user.id)
+
+    candidate = (
+        supabase
+        .table("candidates")
+        .select("id,user_id")
+        .eq("id", candidate_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not candidate.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Candidate not found",
+        )
+
+    if candidate.data[0]["user_id"] != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Candidate does not belong to current user",
+        )
 
     if not file.filename:
         raise HTTPException(
@@ -363,19 +386,11 @@ async def upload_resume(
             detail="No file selected",
         )
 
-    allowed_types = {
-        "application/pdf",
-    }
-
-    if file.content_type not in allowed_types:
+    if file.content_type != "application/pdf":
         raise HTTPException(
             status_code=400,
             detail="Only PDF resumes are supported",
         )
-
-    # -----------------------------------------------------
-    # READ FILE
-    # -----------------------------------------------------
 
     file_bytes = await file.read()
 
@@ -385,11 +400,9 @@ async def upload_resume(
             detail="Uploaded file is empty",
         )
 
-    # -----------------------------------------------------
-    # EXTRACT RESUME TEXT
-    # -----------------------------------------------------
-
-    resume_text = extract_pdf_text(file_bytes)
+    resume_text = extract_pdf_text(
+        file_bytes
+    )
 
     if not resume_text:
         raise HTTPException(
@@ -400,10 +413,6 @@ async def upload_resume(
             ),
         )
 
-    # -----------------------------------------------------
-    # SAVE RESUME RECORD
-    # -----------------------------------------------------
-
     resume_id = str(uuid.uuid4())
 
     resume_data = {
@@ -411,42 +420,40 @@ async def upload_resume(
         "candidate_id": candidate_id,
         "file_name": file.filename,
         "file_type": file.content_type,
-        "file_path": f"resumes/{candidate_id}/{resume_id}.pdf",
+        "file_path": (
+            f"resumes/{candidate_id}/"
+            f"{resume_id}.pdf"
+        ),
     }
 
     try:
-
-        resume_result = (
+        result = (
             supabase
             .table("resumes")
             .insert(resume_data)
             .execute()
         )
 
-        if not resume_result.data:
+        if not result.data:
             raise HTTPException(
                 status_code=500,
                 detail="Failed to save resume",
             )
 
-    except Exception as e:
+    except HTTPException:
+        raise
 
+    except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to save resume: {str(e)}",
+            detail=(
+                f"Failed to save resume: {str(e)}"
+            ),
         )
-
-    # -----------------------------------------------------
-    # GENERATE QUESTIONS USING GEMINI
-    # -----------------------------------------------------
 
     ai_data = generate_questions_with_gemini(
         resume_text
     )
-
-    # -----------------------------------------------------
-    # CREATE ASSESSMENT
-    # -----------------------------------------------------
 
     assessment_result = create_assessment(
         candidate_id=candidate_id,
@@ -454,17 +461,14 @@ async def upload_resume(
         ai_data=ai_data,
     )
 
-    # -----------------------------------------------------
-    # RETURN RESPONSE
-    # -----------------------------------------------------
-
     return {
-        "message": "Resume uploaded and assessment generated successfully",
-
+        "message": (
+            "Resume uploaded and assessment "
+            "generated successfully"
+        ),
         "resume": {
             "id": resume_id,
             "file_name": file.filename,
         },
-
         "assessment": assessment_result,
     }

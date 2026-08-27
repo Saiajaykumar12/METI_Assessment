@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
 
 import QuestionCard from "../components/QuestionCard";
-import ProgressBar from "../components/ProgressBar";
+import ProgressBar from "../components/Progressbar";
 
 import {
   createAttempt,
@@ -16,72 +19,143 @@ export default function Assessment({
   assessment,
   onComplete,
 }) {
-  const [questions, setQuestions] = useState([]);
-  const [attempt, setAttempt] = useState(null);
-  const [current, setCurrent] = useState(0);
-  const [answers, setAnswers] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [questions, setQuestions] =
+    useState([]);
+
+  const [attempt, setAttempt] =
+    useState(null);
+
+  const [current, setCurrent] =
+    useState(0);
+
+  const [answers, setAnswers] =
+    useState({});
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+
+  const assessmentId =
+    assessment?.id ||
+    assessment?.assessment_id;
+
+  const candidateId =
+    candidate?.id ||
+    localStorage.getItem(
+      "candidate_id"
+    );
 
 
   useEffect(() => {
-    if (!candidate?.id || !assessment?.id) {
+    if (
+      !candidateId ||
+      !assessmentId
+    ) {
+      setLoading(false);
+      setError(
+        "Candidate or assessment information is missing."
+      );
       return;
     }
 
-    async function start() {
+
+    async function startAssessment() {
       try {
         setLoading(true);
         setError("");
 
-        const questionData = await getQuestions(
-          assessment.id
-        );
 
-        if (!questionData?.length) {
+        const [
+          questionData,
+          attemptData,
+        ] = await Promise.all([
+          getQuestions(
+            assessmentId
+          ),
+
+          createAttempt(
+            assessmentId,
+            candidateId
+          ),
+        ]);
+
+
+        if (
+          !Array.isArray(questionData) ||
+          questionData.length === 0
+        ) {
           throw new Error(
             "No questions are available for this assessment."
           );
         }
 
-        const attemptData = await createAttempt(
-          assessment.id,
-          candidate.id
+
+        setQuestions(
+          questionData
         );
 
-        setQuestions(questionData);
-        setAttempt(attemptData);
+        setAttempt(
+          attemptData
+        );
+
 
       } catch (err) {
-        setError(
-          err.message || "Failed to start assessment"
+        console.error(
+          "Assessment start error:",
+          err
         );
+
+        setError(
+          err.message ||
+          "Failed to start assessment"
+        );
+
       } finally {
         setLoading(false);
       }
     }
 
-    start();
-  }, [assessment?.id, candidate?.id]);
+
+    startAssessment();
+
+  }, [
+    assessmentId,
+    candidateId,
+  ]);
 
 
-  async function handleAnswer(answer) {
+  async function handleAnswer(
+    answer
+  ) {
     if (!attempt?.id) {
-      setError("Assessment attempt is not ready.");
+      setError(
+        "Assessment attempt is not ready."
+      );
       return;
     }
 
-    const question = questions[current];
+
+    const question =
+      questions[current];
 
     if (!question) {
       return;
     }
 
-    setAnswers((prev) => ({
-      ...prev,
-      [question.id]: answer,
-    }));
+
+    setAnswers(
+      (previous) => ({
+        ...previous,
+        [question.id]: answer,
+      })
+    );
+
 
     try {
       await saveResponse(
@@ -89,113 +163,144 @@ export default function Assessment({
         question.id,
         answer
       );
+
+      setError("");
+
     } catch (err) {
       setError(
-        err.message || "Failed to save answer"
+        err.message ||
+        "Failed to save answer"
       );
     }
   }
 
 
   async function nextQuestion() {
-    const question = questions[current];
+    const question =
+      questions[current];
 
     if (!question) {
       return;
     }
 
+
+    const answer =
+      answers[question.id];
+
+
     if (
-      answers[question.id] === undefined ||
-      answers[question.id] === null ||
-      answers[question.id] === ""
+      answer === undefined ||
+      answer === null ||
+      answer === ""
     ) {
-      setError("Please select an answer.");
+      setError(
+        "Please select an answer."
+      );
       return;
     }
+
 
     setError("");
 
-    if (current < questions.length - 1) {
-      setCurrent((prev) => prev + 1);
+
+    if (
+      current <
+      questions.length - 1
+    ) {
+      setCurrent(
+        (previous) =>
+          previous + 1
+      );
       return;
     }
 
+
     if (!attempt?.id) {
-      setError("Assessment attempt is not ready.");
+      setError(
+        "Assessment attempt is not ready."
+      );
       return;
     }
+
 
     setSaving(true);
 
-    try {
-      const result = await submitAssessment(
-        attempt.id
-      );
 
-      onComplete(result.score || result);
+    try {
+      const result =
+        await submitAssessment(
+          attempt.id
+        );
+
+      onComplete(result);
 
     } catch (err) {
       setError(
-        err.message || "Failed to submit assessment"
+        err.message ||
+        "Failed to submit assessment"
       );
+
     } finally {
       setSaving(false);
     }
   }
 
 
-  if (!candidate || !assessment) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p>Preparing assessment...</p>
-      </div>
-    );
-  }
-
-
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p>Loading assessment...</p>
+        <p>
+          Generating your assessment...
+        </p>
       </div>
     );
   }
 
 
-  if (error && questions.length === 0) {
+  if (error && !questions.length) {
     return (
       <div className="flex min-h-screen items-center justify-center px-6">
+
         <div className="rounded-lg bg-red-50 p-6 text-red-600">
           {error}
         </div>
+
       </div>
     );
   }
 
 
-  const question = questions[current];
-
-  if (!question) {
+  if (!questions.length) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p>No question available.</p>
+        <p>
+          No questions available.
+        </p>
       </div>
     );
   }
+
+
+  const question =
+    questions[current];
 
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10">
+
       <div className="mx-auto max-w-3xl">
 
         <div className="mb-8">
+
           <h1 className="text-2xl font-bold">
-            {assessment.name}
+            {assessment.name ||
+              "AI Generated Assessment"}
           </h1>
 
           <p className="mt-1 text-sm text-slate-500">
             Answer all questions carefully.
           </p>
+
         </div>
 
 
@@ -207,7 +312,9 @@ export default function Assessment({
 
         <QuestionCard
           question={question}
-          answer={answers[question.id]}
+          answer={
+            answers[question.id]
+          }
           onAnswer={handleAnswer}
         />
 
@@ -220,6 +327,7 @@ export default function Assessment({
 
 
         <div className="mt-6 flex justify-end">
+
           <button
             onClick={nextQuestion}
             disabled={saving}
@@ -227,13 +335,16 @@ export default function Assessment({
           >
             {saving
               ? "Submitting..."
-              : current === questions.length - 1
+              : current ===
+                  questions.length - 1
                 ? "Submit Assessment"
                 : "Next Question"}
           </button>
+
         </div>
 
       </div>
+
     </main>
   );
 }
