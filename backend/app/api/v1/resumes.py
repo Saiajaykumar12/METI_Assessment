@@ -2,6 +2,7 @@ import io
 import json
 import re
 import uuid
+from app.services.groq_service import generate_questions_with_groq
 
 from fastapi import (
     APIRouter,
@@ -46,135 +47,6 @@ def extract_pdf_text(file_bytes: bytes) -> str:
             detail=f"Could not read PDF: {str(e)}",
         )
 
-
-def generate_questions_with_gemini(
-    resume_text: str,
-):
-    try:
-        from google import genai
-
-        client = genai.Client(
-            api_key=settings.AI_API_KEY
-        )
-
-        prompt = f"""
-You are an AI technical assessment generator.
-
-Analyze the candidate resume and create a technical
-assessment ONLY from technologies and skills actually
-present in the resume.
-
-Generate exactly:
-- 3 sections
-- 4 questions per section
-- 12 questions total
-
-Use mainly MCQ questions.
-
-Every MCQ must contain:
-- question_code
-- question_type
-- question_text
-- options
-- correct_answer
-- competency
-- required
-
-Allowed question_type:
-mcq
-text
-coding
-
-For text and coding:
-options must be [].
-correct_answer can be "".
-
-Return ONLY valid JSON.
-
-Format:
-
-{{
-  "sections": [
-    {{
-      "title": "Python",
-      "description": "Python technical knowledge",
-      "questions": [
-        {{
-          "question_code": "Q1",
-          "question_type": "mcq",
-          "question_text": "Question",
-          "options": [
-            "A",
-            "B",
-            "C",
-            "D"
-          ],
-          "correct_answer": "A",
-          "competency": "Python",
-          "required": true
-        }}
-      ]
-    }}
-  ]
-}}
-
-Candidate resume:
--------------------------
-{resume_text[:30000]}
--------------------------
-"""
-
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-        )
-
-        response_text = (
-            response.text or ""
-        ).strip()
-
-        response_text = re.sub(
-            r"^```json\s*",
-            "",
-            response_text,
-            flags=re.IGNORECASE,
-        )
-
-        response_text = re.sub(
-            r"^```\s*",
-            "",
-            response_text,
-        )
-
-        response_text = re.sub(
-            r"\s*```$",
-            "",
-            response_text,
-        )
-
-        data = json.loads(response_text)
-
-        if "sections" not in data:
-            raise ValueError(
-                "Gemini response does not contain sections"
-            )
-
-        return data
-
-    except json.JSONDecodeError as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Gemini returned invalid JSON: {str(e)}",
-        )
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Gemini question generation failed: "
-                f"{str(e)}"
-            ),
-        )
 
 
 def create_assessment(
@@ -451,7 +323,7 @@ async def upload_resume(
             ),
         )
 
-    ai_data = generate_questions_with_gemini(
+    ai_data = generate_questions_with_groq(
         resume_text
     )
 

@@ -1,16 +1,17 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    SUPABASE_URL: str
-    SUPABASE_ANON_KEY: str
-    SUPABASE_SERVICE_ROLE_KEY: str
-    AI_API_KEY: str
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        extra="ignore",
-    )
+    SUPABASE_URL: str
+    SUPABASE_KEY: str
+
+    GROQ_API_KEY: str | None = None
+    AI_API_KEY: str | None = None
+
+    class Config:
+        env_file = ".env"
+        extra = "ignore"
 
 
 settings = Settings()

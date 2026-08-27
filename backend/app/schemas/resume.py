@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 
 
+
 class ResumeResponse(BaseModel):
     id: str
     file_name: str
