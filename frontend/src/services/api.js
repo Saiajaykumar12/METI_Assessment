@@ -2,7 +2,8 @@ import { supabase } from "./supabase";
 
 const API_URL = "http://127.0.0.1:8000/api/v1";
 
-const getAuthHeaders = async () => {
+
+async function getAuthHeaders() {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -14,39 +15,162 @@ const getAuthHeaders = async () => {
   return {
     Authorization: `Bearer ${session.access_token}`,
   };
-};
+}
 
-// Create candidate
-export const createCandidate = async (candidateData) => {
-  const authHeaders = await getAuthHeaders();
 
-  const response = await fetch(`${API_URL}/candidates`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders,
-    },
-    body: JSON.stringify(candidateData),
-  });
-
+async function handleResponse(response, defaultMessage) {
   if (!response.ok) {
-    let errorMessage = "Failed to create candidate";
+    let message = defaultMessage;
 
     try {
       const error = await response.json();
-      errorMessage = error.detail || errorMessage;
+      message = error.detail || defaultMessage;
     } catch {
-      // Ignore JSON parsing error
+      // Ignore JSON parsing errors
     }
 
-    throw new Error(errorMessage);
+    throw new Error(message);
   }
 
   return response.json();
-};
+}
 
-// Upload resume
-export const uploadResume = async (file, candidateId) => {
+
+export async function createCandidate(data) {
+  const authHeaders = await getAuthHeaders();
+
+  const response = await fetch(
+    `${API_URL}/candidates`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+      },
+      body: JSON.stringify(data),
+    }
+  );
+
+  return handleResponse(
+    response,
+    "Failed to create candidate"
+  );
+}
+
+
+export async function getAssessments() {
+  const authHeaders = await getAuthHeaders();
+
+  const response = await fetch(
+    `${API_URL}/assessments`,
+    {
+      headers: {
+        ...authHeaders,
+      },
+    }
+  );
+
+  return handleResponse(
+    response,
+    "Failed to fetch assessments"
+  );
+}
+
+
+export async function getQuestions(assessmentId) {
+  const authHeaders = await getAuthHeaders();
+
+  const response = await fetch(
+    `${API_URL}/assessments/${assessmentId}/questions`,
+    {
+      headers: {
+        ...authHeaders,
+      },
+    }
+  );
+
+  return handleResponse(
+    response,
+    "Failed to fetch questions"
+  );
+}
+
+
+export async function createAttempt(
+  assessmentId,
+  candidateId
+) {
+  const authHeaders = await getAuthHeaders();
+
+  const response = await fetch(
+    `${API_URL}/attempts?assessment_id=${assessmentId}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+      },
+      body: JSON.stringify({
+        candidate_id: candidateId,
+      }),
+    }
+  );
+
+  return handleResponse(
+    response,
+    "Failed to create attempt"
+  );
+}
+
+
+export async function saveResponse(
+  attemptId,
+  questionId,
+  answer
+) {
+  const authHeaders = await getAuthHeaders();
+
+  const response = await fetch(
+    `${API_URL}/attempts/${attemptId}/responses/${questionId}`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+      },
+      body: JSON.stringify({
+        answer,
+      }),
+    }
+  );
+
+  return handleResponse(
+    response,
+    "Failed to save response"
+  );
+}
+
+
+export async function submitAssessment(attemptId) {
+  const authHeaders = await getAuthHeaders();
+
+  const response = await fetch(
+    `${API_URL}/attempts/${attemptId}/submit`,
+    {
+      method: "POST",
+      headers: {
+        ...authHeaders,
+      },
+    }
+  );
+
+  return handleResponse(
+    response,
+    "Failed to submit assessment"
+  );
+}
+
+export async function uploadResume(file, candidateId) {
   const authHeaders = await getAuthHeaders();
 
   const formData = new FormData();
@@ -63,201 +187,8 @@ export const uploadResume = async (file, candidateId) => {
     }
   );
 
-  if (!response.ok) {
-    let errorMessage = "Resume upload failed";
-
-    try {
-      const error = await response.json();
-      errorMessage = error.detail || errorMessage;
-    } catch {
-      // Ignore JSON parsing error
-    }
-
-    throw new Error(errorMessage);
-  }
-
-  return response.json();
-};
-
-// Get assessments
-export const getAssessments = async () => {
-  const authHeaders = await getAuthHeaders();
-
-  const response = await fetch(`${API_URL}/assessments`, {
-    method: "GET",
-    headers: {
-      ...authHeaders,
-    },
-  });
-
-  if (!response.ok) {
-    let errorMessage = "Failed to fetch assessments";
-
-    try {
-      const error = await response.json();
-      errorMessage = error.detail || errorMessage;
-    } catch {
-      // Ignore JSON parsing error
-    }
-
-    throw new Error(errorMessage);
-  }
-
-  return response.json();
-};
-
-// Get questions for assessment
-export const getQuestions = async (assessmentId) => {
-  const authHeaders = await getAuthHeaders();
-
-  const response = await fetch(
-    `${API_URL}/assessments/${assessmentId}/questions`,
-    {
-      method: "GET",
-      headers: {
-        ...authHeaders,
-      },
-    }
+  return handleResponse(
+    response,
+    "Failed to upload resume"
   );
-
-  if (!response.ok) {
-    let errorMessage = "Failed to fetch questions";
-
-    try {
-      const error = await response.json();
-      errorMessage = error.detail || errorMessage;
-    } catch {
-      // Ignore JSON parsing error
-    }
-
-    throw new Error(errorMessage);
-  }
-
-  return response.json();
-};
-
-// Create attempt
-export const createAttempt = async (assessmentId) => {
-  const authHeaders = await getAuthHeaders();
-
-  const response = await fetch(
-    `${API_URL}/attempts?assessment_id=${assessmentId}`,
-    {
-      method: "POST",
-      headers: {
-        ...authHeaders,
-      },
-    }
-  );
-
-  if (!response.ok) {
-    let errorMessage = "Failed to create attempt";
-
-    try {
-      const error = await response.json();
-      errorMessage = error.detail || errorMessage;
-    } catch {
-      // ignore
-    }
-
-    throw new Error(errorMessage);
-  }
-
-  return response.json();
-};
-
-// Save response
-export const saveResponse = async (
-  attemptId,
-  questionId,
-  selectedAnswer
-) => {
-  const authHeaders = await getAuthHeaders();
-
-  const response = await fetch(`${API_URL}/attempts/${attemptId}/responses`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders,
-    },
-    body: JSON.stringify({
-      question_id: questionId,
-      selected_answer: selectedAnswer,
-    }),
-  });
-
-  if (!response.ok) {
-    let errorMessage = "Failed to save response";
-
-    try {
-      const error = await response.json();
-      errorMessage = error.detail || errorMessage;
-    } catch {
-      // Ignore JSON parsing error
-    }
-
-    throw new Error(errorMessage);
-  }
-
-  return response.json();
-};
-
-// Submit assessment
-export const submitAssessment = async (attemptId) => {
-  const authHeaders = await getAuthHeaders();
-
-  const response = await fetch(
-    `${API_URL}/attempts/${attemptId}/submit`,
-    {
-      method: "POST",
-      headers: {
-        ...authHeaders,
-      },
-    }
-  );
-
-  if (!response.ok) {
-    let errorMessage = "Failed to submit assessment";
-
-    try {
-      const error = await response.json();
-      errorMessage = error.detail || errorMessage;
-    } catch {
-      // Ignore JSON parsing error
-    }
-
-    throw new Error(errorMessage);
-  }
-
-  return response.json();
-};
-
-// Get result
-export const getResult = async (attemptId) => {
-  const authHeaders = await getAuthHeaders();
-
-  const response = await fetch(
-    `${API_URL}/attempts/${attemptId}/result`,
-    {
-      method: "GET",
-      headers: {
-        ...authHeaders,
-      },
-    }
-  );
-
-  if (!response.ok) {
-    let errorMessage = "Failed to fetch result";
-
-    try {
-      const error = await response.json();
-      errorMessage = error.detail || errorMessage;
-    } catch {
-      // Ignore JSON parsing error
-    }
-
-    throw new Error(errorMessage);
-  }
-
-  return response.json();
-};
+}
