@@ -1,7 +1,11 @@
 import { supabase } from "./supabase";
 
+const DEFAULT_API_URL = import.meta.env.PROD
+  ? "https://meti-assessment-2.onrender.com"
+  : "http://127.0.0.1:8000";
+
 const API_URL = `${(
-  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"
+  import.meta.env.VITE_API_URL || DEFAULT_API_URL
 ).replace(/\/+$/, "").replace(/\/api\/v1$/, "")}/api/v1`;
 
 async function getAuthHeaders() {

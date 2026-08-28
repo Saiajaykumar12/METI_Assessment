@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     AI_API_KEY: str | None = None
     CORS_ORIGINS: str = (
         "http://localhost:5173,http://localhost:5174,"
-        "https://futureskillpredictor-hgljecme4-ajays-projects-dc08a735.vercel.app"
+        "https://futureskillpredictor.vercel.app"
     )
     MAX_RESUME_SIZE_BYTES: int = 5_000_000
 
