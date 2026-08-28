@@ -17,23 +17,38 @@ import {
 
 const STORAGE_KEY = "meti_assessment_progress";
 
+function getSavedProgress(candidateId, assessmentId) {
+  if (!candidateId || !assessmentId) {
+    return {};
+  }
+
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    const parsed = saved ? JSON.parse(saved) : null;
+
+    if (
+      parsed?.candidateId !== candidateId ||
+      parsed?.assessmentId !== assessmentId
+    ) {
+      return {};
+    }
+
+    return parsed;
+  } catch (err) {
+    console.error(
+      "Failed to restore assessment progress:",
+      err
+    );
+    return {};
+  }
+}
+
 export default function Assessment({
   candidate,
   assessment,
   onComplete,
 }) {
   const [questions, setQuestions] = useState([]);
-  const [attempt, setAttempt] = useState(null);
-
-  const [current, setCurrent] = useState(0);
-  const [answers, setAnswers] = useState({});
-
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  const saveTimers = useRef({});
-  const saveQueue = useRef(Promise.resolve());
 
   const assessmentId =
     assessment?.id ||
@@ -43,59 +58,40 @@ export default function Assessment({
     candidate?.id ||
     localStorage.getItem("candidate_id");
 
+  const savedProgress = getSavedProgress(
+    candidateId,
+    assessmentId
+  );
+
+  const [current, setCurrent] = useState(
+    typeof savedProgress.current === "number"
+      ? savedProgress.current
+      : 0
+  );
+  const [answers, setAnswers] = useState(
+    savedProgress.answers &&
+      typeof savedProgress.answers === "object"
+      ? savedProgress.answers
+      : {}
+  );
+  const [attempt, setAttempt] = useState(
+    savedProgress.attemptId
+      ? { id: savedProgress.attemptId }
+      : null
+  );
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const saveTimers = useRef({});
+  const saveQueue = useRef(Promise.resolve());
+
   /*
    * --------------------------------------------------
    * Restore saved progress
    * --------------------------------------------------
    */
-
-  useEffect(() => {
-    if (!candidateId || !assessmentId) {
-      return;
-    }
-
-    try {
-      const saved =
-        localStorage.getItem(STORAGE_KEY);
-
-      if (!saved) {
-        return;
-      }
-
-      const parsed = JSON.parse(saved);
-
-      if (
-        parsed.candidateId !== candidateId ||
-        parsed.assessmentId !== assessmentId
-      ) {
-        return;
-      }
-
-      if (
-        typeof parsed.current === "number"
-      ) {
-        setCurrent(parsed.current);
-      }
-
-      if (
-        parsed.answers &&
-        typeof parsed.answers === "object"
-      ) {
-        setAnswers(parsed.answers);
-      }
-
-      if (parsed.attemptId) {
-        setAttempt({
-          id: parsed.attemptId,
-        });
-      }
-    } catch (err) {
-      console.error(
-        "Failed to restore assessment progress:",
-        err
-      );
-    }
-  }, [candidateId, assessmentId]);
 
   /*
    * --------------------------------------------------
@@ -105,10 +101,6 @@ export default function Assessment({
 
   useEffect(() => {
     if (!candidateId || !assessmentId) {
-      setLoading(false);
-      setError(
-        "Candidate or assessment information is missing."
-      );
       return;
     }
 

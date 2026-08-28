@@ -13,8 +13,6 @@ export default function Dashboard({
 
   useEffect(() => {
     if (!candidateId) {
-      setLoading(false);
-      setError("Candidate information is missing.");
       return;
     }
 
@@ -55,6 +53,16 @@ export default function Dashboard({
       cancelled = true;
     };
   }, [candidateId]);
+
+  if (!candidateId) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6">
+        <div className="w-full max-w-lg rounded-lg bg-red-50 p-6 text-red-600">
+          <p>Candidate information is missing.</p>
+        </div>
+      </main>
+    );
+  }
 
   if (loading) {
     return (

@@ -191,7 +191,6 @@ Candidate resume:
             ).strip()
             data = json.loads(retry_text)
 
-        normalize_assessment_data(data)
         try:
             normalize_assessment_data(data)
             validate_assessment_data(data)
@@ -300,6 +299,9 @@ def normalize_assessment_data(data: dict):
 
 
 def validate_assessment_data(data: dict):
+    if not isinstance(data, dict):
+        raise ValueError("Assessment response must be a JSON object")
+
     sections = data.get("sections")
 
     if not isinstance(sections, list) or len(sections) != 3:

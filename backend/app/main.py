@@ -14,6 +14,7 @@ from app.api.v1.resumes import (
     router as resumes_router,
 )
 
+from app.core.config import settings
 from app.db.database import supabase
 
 
@@ -26,8 +27,9 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
+        origin.strip()
+        for origin in settings.CORS_ORIGINS.split(",")
+        if origin.strip()
     ],
     allow_credentials=True,
     allow_methods=["*"],
