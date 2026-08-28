@@ -6,7 +6,7 @@ import {
 } from "react";
 
 import QuestionCard from "../components/QuestionCard";
-import ProgressBar from "../components/ProgressBar";
+import ProgressBar from "../components/Progressbar";
 
 import {
   createAttempt,
