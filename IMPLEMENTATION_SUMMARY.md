@@ -107,6 +107,7 @@ No changes were made to the database schema. The implementation assumes:
 ```
 SUPABASE_URL=https://eodecyeafjaqtospatai.supabase.co
 SUPABASE_KEY=<PUBLISHABLE_KEY>
+SUPABASE_SERVICE_ROLE_KEY=<SERVICE_ROLE_KEY>
 GROQ_API_KEY=<GROQ_API_KEY>
 ```
 

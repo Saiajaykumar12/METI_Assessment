@@ -1,8 +1,7 @@
-from app.db.database import admin_supabase as supabase
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.auth import get_current_user
-from app.db.database import supabase
+from app.db.database import admin_supabase
 from app.schemas.candidate import CandidateCreate
 
 
@@ -32,7 +31,7 @@ def create_candidate(
 
     try:
         existing = (
-            supabase
+            admin_supabase
             .table("candidates")
             .select("*")
             .eq("user_id", user_id)
@@ -44,7 +43,7 @@ def create_candidate(
             candidate_id = existing.data[0]["id"]
 
             result = (
-                supabase
+                admin_supabase
                 .table("candidates")
                 .update(candidate_data)
                 .eq("id", candidate_id)
@@ -60,7 +59,7 @@ def create_candidate(
             return result.data[0]
 
         result = (
-            supabase
+            admin_supabase
             .table("candidates")
             .insert(candidate_data)
             .execute()

@@ -213,7 +213,8 @@ curl -X GET http://127.0.0.1:8000/api/v1/attempts/candidate/CANDIDATE_ID/results
 ### Backend won't start
 - Check Python version (3.9+)
 - Check all dependencies installed: `pip install -r requirements.txt`
-- Check .env file has SUPABASE_URL, SUPABASE_KEY, GROQ_API_KEY
+- Check `.env` has `SUPABASE_URL`, `SUPABASE_KEY`,
+  `SUPABASE_SERVICE_ROLE_KEY`, and `GROQ_API_KEY`
 
 ### Frontend won't load
 - Check npm packages: `npm install`
