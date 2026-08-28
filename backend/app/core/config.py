@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_KEY: str
 
-    SUPABASE_SERVICE_ROLE_KEY: str | None = None
+    SUPABASE_SERVICE_ROLE_KEY: str
     GROQ_API_KEY: str | None = None
     AI_API_KEY: str | None = None
     CORS_ORIGINS: str = (
